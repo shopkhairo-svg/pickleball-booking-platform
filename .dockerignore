@@ -1,0 +1,36 @@
+# =============================================
+# .dockerignore — Root level
+# Tránh copy các file không cần thiết vào Docker context
+# =============================================
+
+# Git
+.git
+.gitignore
+
+# Node modules (sẽ được cài lại trong container)
+**/node_modules
+
+# Logs
+**/*.log
+**/logs
+
+# Build output (frontend build lại trong container)
+frontend/dist
+
+# Environment files thật (không đưa vào image!)
+**/.env
+# Nhưng vẫn cần .env.example
+!**/.env.example
+
+# IDE & OS files
+.idea
+.vscode
+.agents
+**/.DS_Store
+**/Thumbs.db
+
+# Test files
+tests/
+
+# README
+README.md
