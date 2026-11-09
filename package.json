@@ -6,16 +6,16 @@
   "scripts": {},
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tainguyen307/Pickleball-Booking-System.git"
+    "url": "git+https://github.com/shopkhairo-svg/pickleball-booking-platform.git"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
-    "url": "https://github.com/tainguyen307/Pickleball-Booking-System/issues"
+    "url": "https://github.com/shopkhairo-svg/pickleball-booking-platform/issues/1"
   },
-  "homepage": "https://github.com/tainguyen307/Pickleball-Booking-System#readme",
+  "homepage": "https://github.com/shopkhairo-svg/pickleball-booking-platform#readme",
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.3"
