@@ -1,3 +1,4 @@
+import { buildCourtFilters } from "../utils/courtFilters.js";
 import courtRepository from "../repositories/court.repository.js";
 import SubCourt from "../models/subCourt.model.js";
 import CourtSlot from "../models/courtSlot.model.js";
@@ -7,38 +8,7 @@ class CourtService {
      * Logic nghiệp vụ xử lý bộ lọc nâng cao cho trang chủ & trang danh sách
      */
     async getCourtsListing(queryParams) {
-        const { type, location, minPrice, maxPrice, search, limit = 6, page = 1 } = queryParams;
-
-        const parsedLimit = parseInt(limit);
-        const parsedPage = parseInt(page);
-        const skip = (parsedPage - 1) * parsedLimit;
-
-        // Khởi tạo Object bộ lọc động
-        const filter = {};
-
-        // 1. Bộ lọc Loại sân (INDOOR / OUTDOOR)
-        if (type && ["INDOOR", "OUTDOOR"].includes(type.toUpperCase())) {
-            filter.type = type.toUpperCase();
-        }
-
-        // 2. Bộ lọc Khu vực (Tìm kiếm regex tương đối không phân biệt hoa thường)
-        if (location) {
-            filter.location = { $regex: location, $options: "i" };
-        }
-
-        // 3. Thuật toán tìm kiếm văn bản thông minh (Tên sân hoặc mô tả)
-        if (search) {
-            filter.$text = { $search: search };
-        }
-
-        // 4. Bộ lọc Khoảng giá tiền mỗi giờ
-        if (minPrice || maxPrice) {
-            filter.pricePerHour = {};
-            if (minPrice) filter.pricePerHour.$gte = parseInt(minPrice);
-            if (maxPrice) filter.pricePerHour.$lte = parseInt(maxPrice);
-        }
-
-        // Gọi Repository thực thi bốc dữ liệu
+        const { filter, limit: parsedLimit, page: parsedPage, skip } = buildCourtFilters(queryParams);
         const { courts, total } = await courtRepository.findAndCount(filter, skip, parsedLimit);
 
         return {
@@ -65,6 +35,7 @@ class CourtService {
         }
 
         const targetDate = dateQuery || new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+        if (typeof targetDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || !Number.isFinite(Date.parse(targetDate)) || new Date(targetDate).toISOString().slice(0, 10) !== targetDate) throw new Error("Ngày tìm sân không hợp lệ.");
 
         // 2. Lấy danh sách tất cả các sân nhỏ thuộc cụm này (bao gồm cả sân đang bảo trì, chỉ ẩn sân HIDDEN)
         const subCourts = await SubCourt.find({ courtId, status: { $ne: "HIDDEN" } });
@@ -86,7 +57,7 @@ class CourtService {
                     if (slotDateTimeStr < nowStr) {
                         slotObj.isPast = true; // Đánh dấu ô giờ đã trôi qua
                     }
-                    if (sub.status === "MAINTENANCE") {
+                    if (sub.status === "MAINTENANCE" || court.status !== "AVAILABLE") {
                         slotObj.isMaintenance = true; // Đánh dấu ô giờ đang bảo trì
                     }
                     return slotObj;

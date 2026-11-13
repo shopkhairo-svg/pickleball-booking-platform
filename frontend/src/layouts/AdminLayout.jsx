@@ -1,3 +1,4 @@
+import { authService } from "@/services/auth.service";
 // src/layouts/AdminLayout.jsx
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
@@ -16,15 +17,15 @@ const navSections = [
         items: [
             { path: "/admin/courts", label: "Sân", icon: "sports_tennis" },
             { path: "/admin/bookings", label: "Booking", icon: "event_available" },
-            { path: "/admin/equipments", label: "Thiết bị", icon: "inventory_2" },
-            { path: "/admin/maintenance", label: "Bảo trì", icon: "build" },
+            { path: "/admin/equipments", label: "Thiết bị · Đang phát triển", icon: "inventory_2" },
+            { path: "/admin/maintenance", label: "Bảo trì · Đang phát triển", icon: "build" },
         ],
     },
     {
         title: "Quản trị",
         items: [
             { path: "/admin/users", label: "Người dùng", icon: "group" },
-            { path: "/admin/coupons", label: "Mã giảm giá", icon: "sell" },
+            { path: "/admin/coupons", label: "Ưu đãi · Đang phát triển", icon: "sell" },
             { path: "/admin/reviews", label: "Đánh giá", icon: "rate_review" },
         ],
     },
@@ -48,7 +49,8 @@ export default function AdminLayout() {
     const { user, clearAuth } = useAuthStore();
     const navigate = useNavigate();
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await authService.logout();
         clearAuth();
         navigate("/login");
     };

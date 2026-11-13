@@ -28,7 +28,7 @@ class AuthController {
                 }
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -65,7 +65,7 @@ class AuthController {
                 }
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -95,7 +95,7 @@ class AuthController {
     //             }
     //         });
     //     } catch (error) {
-    //         return res.status(400).json({
+    //         return res.status(error.status || 400).json({
     //             success: false,
     //             message: error.message
     //         });
@@ -112,7 +112,7 @@ class AuthController {
                 message: "Mã OTP xác thực đã được gửi vào Email của bạn. Vui lòng kiểm tra!"
             });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -126,7 +126,7 @@ class AuthController {
                 message: "Xác minh Email thành công! Tài khoản của bạn đã sẵn sàng hoạt động."
             });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -144,7 +144,7 @@ class AuthController {
                 message: "Mã OTP khôi phục mật khẩu đã được gửi thành công đến email của bạn!"
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message || "Có lỗi xảy ra khi xử lý yêu cầu quên mật khẩu!"
             });
@@ -165,7 +165,7 @@ class AuthController {
                 message: "Mật khẩu của bạn đã được cập nhật mới thành công! Vui lòng đăng nhập lại."
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });

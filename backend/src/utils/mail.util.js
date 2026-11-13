@@ -1,18 +1,23 @@
 // src/utils/mail.util.js
 import nodemailer from "nodemailer";
+import { getSmtpOptions } from "../config/authConfig.js";
 
 class MailUtils {
-    constructor() {
-        // Lúc này process.env đã được nạp chuẩn 100% từ đầu server.js
-        this.transporter = nodemailer.createTransport({
-            host: process.env.MAIL_HOST,
-            port: parseInt(process.env.MAIL_PORT || "465"),
-            secure: true,
-            auth: {
-                user: process.env.MAIL_USER,
-                pass: process.env.MAIL_PASSWORD,
-            },
+    async sendBookingReminder(booking) {
+        return this.transporter.sendMail({
+            from: `"PickleballPro" <${process.env.MAIL_USER}>`,
+            to: booking.userId.email,
+            subject: `[PickleballPro] Sắp đến giờ chơi — ${booking.bookingCode}`,
+            text: `Xin chào ${booking.userId.fullName || "bạn"},\n\nLịch đặt sân của bạn sẽ bắt đầu trong vòng 30 phút.\nMã đơn: ${booking.bookingCode}\nSân: ${booking.courtId?.name || ""}\nĐịa chỉ: ${booking.courtId?.address || booking.courtId?.location || ""}\nNgày: ${booking.bookingDate}\nGiờ: ${booking.startTime}–${booking.endTime} (giờ Việt Nam)\n\nVui lòng đến sân đúng giờ. Chúc bạn có buổi chơi vui vẻ!`
         });
+    }
+    get transporter() {
+        // Validate lazily so missing SMTP does not break password login.
+        return nodemailer.createTransport(getSmtpOptions());
+    }
+
+    assertConfigured() {
+        getSmtpOptions();
     }
 
     /**
@@ -91,8 +96,9 @@ class MailUtils {
             console.log(`✉️ OTP Đăng ký đã gửi thành công tới: ${toEmail} - ID: ${info.messageId}`);
             return true;
         } catch (error) {
+            if (error.status === 503) throw error;
             console.error("❌ Lỗi gửi OTP tại lớp MailUtils:", error);
-            throw new Error("Không thể bắn mail xác thực OTP vào lúc này!");
+            throw Object.assign(new Error("Không thể gửi email OTP. Vui lòng thử lại sau hoặc liên hệ quản trị viên."), { status: 503 });
         }
     }
 
@@ -132,8 +138,9 @@ class MailUtils {
             console.log(`✉️ OTP Khôi phục mật khẩu đã gửi thành công tới: ${toEmail} - ID: ${info.messageId}`);
             return true;
         } catch (error) {
+            if (error.status === 503) throw error;
             console.error("❌ Lỗi gửi OTP khôi phục mật khẩu:", error);
-            throw new Error("Không thể gửi email OTP khôi phục mật khẩu vào lúc này!");
+            throw Object.assign(new Error("Không thể gửi email OTP khôi phục mật khẩu vào lúc này!"), { status: 503 });
         }
     }
 

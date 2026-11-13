@@ -1,5 +1,5 @@
 // src/features/admin/pages/BookingManagement.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import adminService from "../../../services/adminService";
 
 const statusConfig = {
@@ -309,9 +309,8 @@ export default function BookingManagement() {
     const [detailTarget, setDetailTarget] = useState(null);   // booking muốn xem chi tiết hủy
     const [actionMsg, setActionMsg] = useState({ text: "", type: "" });
 
-    useEffect(() => { fetchBookings(); }, [filters.page, filters.status]);
 
-    const fetchBookings = async () => {
+    const fetchBookings = useCallback(async () => {
         try {
             setLoading(true);
             const params = { page: filters.page, limit: 10 };
@@ -326,7 +325,9 @@ export default function BookingManagement() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filters.page, filters.status, filters.startDate, filters.endDate]);
+
+    useEffect(() => { const timer = setTimeout(fetchBookings, 0); return () => clearTimeout(timer); }, [fetchBookings]);
 
     const showMsg = (text, type = "success") => {
         setActionMsg({ text, type });
@@ -342,6 +343,15 @@ export default function BookingManagement() {
         } catch (err) {
             showMsg(err?.response?.data?.message || err.message, "error");
         }
+    };
+
+    const handleCashPayment = async (id) => {
+        if (!window.confirm("Bạn đã thực sự nhận đủ tiền tại sân? Thao tác này ghi nhận đơn đã thanh toán.")) return;
+        try {
+            await adminService.recordCashPayment(id);
+            showMsg("Đã ghi nhận thu tiền tại sân.");
+            fetchBookings();
+        } catch (err) { showMsg(err.response?.data?.message || err.message, "error"); }
     };
 
     const handleComplete = async (id) => {
@@ -500,6 +510,9 @@ export default function BookingManagement() {
                                                         </button>
                                                     )}
                                                     {/* Hoàn tất */}
+                                                    {b.status === "CONFIRMED" && b.paymentStatus === "UNPAID" && b.paymentMethod === "CASH" && (
+                                                        <button onClick={() => handleCashPayment(b._id)} title="Ghi nhận đã thu đủ tiền tại sân" className="rounded-lg p-2 text-primary hover:bg-green-50">Thu tiền</button>
+                                                    )}
                                                     {b.status === "CONFIRMED" && b.paymentStatus === "PAID" && (() => {
                                                         const nowVN = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
                                                         const bookingEndStr = `${b.bookingDate} ${b.endTime}:00`;

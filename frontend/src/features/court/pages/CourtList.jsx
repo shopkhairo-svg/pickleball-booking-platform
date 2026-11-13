@@ -10,6 +10,7 @@ export default function CourtList() {
     const [courts, setCourts] = useState([]);
     const [pagination, setPagination] = useState({});
     const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState("");
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
     // State cục bộ cho form (chưa áp dụng)
@@ -54,6 +55,7 @@ export default function CourtList() {
         let isMounted = true;
         const timer = window.setTimeout(() => {
             setIsLoading(true);
+            setError("");
 
             const params = Object.fromEntries([...searchParams]);
             if (!params.page) params.page = "1";
@@ -65,7 +67,11 @@ export default function CourtList() {
                         setPagination(res.pagination);
                     }
                 })
-                .catch(err => console.error("Lỗi fetch danh sách sân:", err))
+                .catch(err => {
+                    if (!isMounted) return;
+                    setCourts([]); setPagination({});
+                    setError(err.response?.data?.message || "Không thể tải danh sách sân. Vui lòng thử lại.");
+                })
                 .finally(() => {
                     if (isMounted) setIsLoading(false);
                 });
@@ -92,6 +98,10 @@ export default function CourtList() {
     // Áp dụng bộ lọc từ sidebar
     const handleApplyFilters = (e) => {
         e.preventDefault();
+        if (localMinPrice !== "" && localMaxPrice !== "" && Number(localMinPrice) > Number(localMaxPrice)) {
+            setError("Giá tối thiểu không được lớn hơn giá tối đa.");
+            return;
+        }
         const newParams = new URLSearchParams(searchParams);
         newParams.set("page", "1");
 
@@ -353,6 +363,7 @@ export default function CourtList() {
                             </h2>
                         </div>
 
+                        {error && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-700">{error}</p>}
                         {isLoading ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                                 {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)}

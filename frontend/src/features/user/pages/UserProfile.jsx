@@ -1,3 +1,4 @@
+import { authService } from "@/services/auth.service";
 // src/features/user/pages/UserProfile.jsx
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -216,7 +217,7 @@ function ReviewModal({ booking, onClose, onSuccess }) {
                     <div className="flex items-center gap-2.5 p-3 bg-emerald-50 rounded-xl border border-emerald-200">
                         <span className="material-symbols-outlined text-primary text-[22px]">redeem</span>
                         <p className="text-xs text-emerald-700 font-medium">
-                            Bạn sẽ nhận <span className="font-bold">20 điểm thưởng</span> sau khi gửi đánh giá!
+                            Đánh giá sẽ được hiển thị sau khi quản trị viên duyệt.
                         </p>
                     </div>
 
@@ -607,7 +608,7 @@ function BookingCard({ booking, onCancel, onReview, onRepay, onViewDetail }) {
     const payment = paymentConfig[booking.paymentStatus] || { label: booking.paymentStatus, cls: "bg-gray-100 text-gray-600" };
     const canCancel = !["CANCELLED", "COMPLETED"].includes(booking.status);
     const canReview = booking.status === "COMPLETED" && booking.paymentStatus === "PAID";
-    const canRepay = booking.paymentStatus === "UNPAID" && booking.status !== "CANCELLED";
+    const canRepay = false; // Online payments are not released.
     const formatMoney = (n) => n?.toLocaleString("vi-VN") + "đ";
 
     return (
@@ -803,7 +804,8 @@ export default function UserProfile() {
     }, []);
 
     useEffect(() => {
-        fetchBookings();
+        const timer = setTimeout(fetchBookings, 0);
+        return () => clearTimeout(timer);
     }, [fetchBookings]);
 
     // ── Handlers ──
@@ -861,7 +863,8 @@ export default function UserProfile() {
         setTimeout(() => setReviewSuccess(false), 4000);
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await authService.logout();
         clearAuth();
         localStorage.removeItem("refreshToken");
         navigate("/login");
@@ -1144,7 +1147,7 @@ export default function UserProfile() {
                                 <span className="material-symbols-outlined text-emerald-500 text-[22px]">check_circle</span>
                                 <div>
                                     <p className="font-bold">Đánh giá thành công!</p>
-                                    <p className="text-sm font-normal text-emerald-600">Bạn đã nhận được 20 điểm thưởng vào ví tích lũy.</p>
+                                    <p className="text-sm font-normal text-emerald-600">Cảm ơn bạn đã chia sẻ trải nghiệm tại sân.</p>
                                 </div>
                             </div>
                         )}
@@ -1178,7 +1181,7 @@ export default function UserProfile() {
                                     </h2>
                                     <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
                                         <span className="material-symbols-outlined text-[14px]">star</span>
-                                        Nhấn "Đánh giá" trên đơn đã hoàn thành để nhận điểm thưởng
+                                        Nhấn "Đánh giá" trên đơn đã hoàn thành để chia sẻ trải nghiệm
                                     </p>
                                 </div>
                                 <div className="space-y-3">

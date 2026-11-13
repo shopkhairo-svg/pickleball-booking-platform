@@ -15,7 +15,7 @@ class BookingController {
                 equipments
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -35,7 +35,7 @@ class BookingController {
                 ...result
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -55,7 +55,7 @@ class BookingController {
                 bookings
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -77,7 +77,7 @@ class BookingController {
                 ...result
             });
         } catch (error) {
-            return res.status(400).json({
+            return res.status(error.status || 400).json({
                 success: false,
                 message: error.message
             });
@@ -94,7 +94,7 @@ class BookingController {
             const result = await bookingService.createPaymentIntent(userId, bookingId);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -110,7 +110,7 @@ class BookingController {
             const result = await bookingService.verifyAndExecutePayment(userId, bookingId, paymentMethod);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 }

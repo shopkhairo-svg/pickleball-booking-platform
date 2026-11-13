@@ -1,12 +1,9 @@
 import Review from "../models/review.model.js";
 import Booking from "../models/booking.model.js";
 import Court from "../models/court.model.js";
-import RewardLog from "../models/rewardLog.model.js";
-import pointsService from "./points.service.js";
 import notificationService from "./notification.service.js";
 import mongoose from "mongoose";
 
-const REVIEW_REWARD_POINTS = parseInt(process.env.REVIEW_REWARD_POINTS || "20", 10);
 
 class ReviewService {
     async updateCourtStats(courtId) {
@@ -49,8 +46,7 @@ class ReviewService {
         const existingReviews = await Review.find({
             userId,
             courtId,
-            bookingId: { $in: bookingIds },
-            status: { $ne: "DELETED" }
+            bookingId: { $in: bookingIds }
         }).select("bookingId");
 
         const reviewedBookingIds = new Set(existingReviews.map(review => review.bookingId.toString()));
@@ -89,7 +85,7 @@ class ReviewService {
         });
 
         // updateCourtStats chỉ tính review APPROVED → stats vẫn chính xác
-        await this.updateCourtStats(courtId);
+        // Pending reviews do not change public rating statistics.
 
         // ✅ Fix #11: Không cộng điểm ngay — chỉ cộng khi admin APPROVE review
         // Điểm thưởng sẽ được cộng trong updateReviewStatus() khi status chuyển sang APPROVED
@@ -101,7 +97,7 @@ class ReviewService {
             type: "REVIEW",
             referenceId: review._id,
             referenceType: "Review"
-        });
+        }).catch(error => console.error("[Review] Notification:", error.message));
 
         await notificationService.createForAdmins({
             title: "Có đánh giá sân mới cần duyệt",
@@ -109,17 +105,17 @@ class ReviewService {
             type: "REVIEW",
             referenceId: review._id,
             referenceType: "Review"
-        });
+        }).catch(error => console.error("[Review] Notification:", error.message));
 
         return {
-            message: "Đánh giá đã được ghi nhận và đang chờ xét duyệt. Bạn sẽ nhận điểm thưởng sau khi đánh giá được duyệt!",
+            message: "Đánh giá đã được ghi nhận và đang chờ xét duyệt.",
             review
         };
     }
 
     async getReviewsByCourt(courtId, query = {}) {
-        const page = parseInt(query.page, 10) || 1;
-        const limit = Math.min(parseInt(query.limit, 10) || 10, 50);
+        const page = Math.max(1, parseInt(query.page, 10) || 1);
+        const limit = Math.max(1, Math.min(parseInt(query.limit, 10) || 10, 50));
         const skip = (page - 1) * limit;
 
         const filter = {
@@ -165,8 +161,7 @@ class ReviewService {
     async getMyBookingReview(userId, bookingId) {
         const review = await Review.findOne({
             userId,
-            bookingId,
-            status: { $ne: "DELETED" }
+            bookingId
         });
         return { review: review || null, hasReview: !!review };
     }
@@ -180,39 +175,12 @@ class ReviewService {
         const review = await Review.findById(reviewId);
         if (!review) throw new Error("Đánh giá không tồn tại!");
 
-        const prevStatus = review.status;
         review.status = nextStatus;
         await review.save();
 
         await this.updateCourtStats(review.courtId);
 
         // ✅ Fix #11: Cộng điểm thưởng khi admin APPROVE review lần đầu tiên (trước đó là PENDING)
-        if (nextStatus === "APPROVED" && prevStatus === "PENDING") {
-            await pointsService.earn(review.userId, REVIEW_REWARD_POINTS, {
-                referenceId: review._id,
-                referenceType: "Review",
-                description: "Thưởng điểm khi đánh giá sân được duyệt"
-            });
-
-            await RewardLog.create({
-                userId: review.userId,
-                rewardType: "POINT",
-                points: REVIEW_REWARD_POINTS,
-                reason: "REVIEW_REWARD",
-                referenceId: review._id,
-                referenceType: "Review"
-            });
-
-            await notificationService.createForUser({
-                userId: review.userId,
-                title: "Đánh giá đã được duyệt — Nhận điểm thưởng!",
-                message: `Đánh giá của bạn đã được phê duyệt. Hệ thống đã cộng ${REVIEW_REWARD_POINTS} điểm vào ví tích lũy.`,
-                type: "POINT",
-                referenceId: review._id,
-                referenceType: "Review"
-            });
-        }
-
         return { message: "Cập nhật trạng thái đánh giá thành công!", review };
     }
 }

@@ -97,6 +97,13 @@ class AdminController {
         }
     }
 
+    async recordCashPayment(req, res) {
+        try {
+            const result = await adminService.recordCashPayment(req.params.id, req.user.id);
+            return res.json({ success: true, ...result });
+        } catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+    }
+
     async cancelBooking(req, res) {
         try {
             const { cancelReason } = req.body;

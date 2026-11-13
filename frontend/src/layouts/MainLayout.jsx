@@ -1,3 +1,4 @@
+import { authService } from "@/services/auth.service";
 // src/layouts/MainLayout.jsx
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore.js";
@@ -7,7 +8,8 @@ export default function MainLayout() {
     const navigate = useNavigate();
     const { user, isAuthenticated, clearAuth } = useAuthStore();
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await authService.logout();
         clearAuth();
         localStorage.removeItem("refreshToken");
         navigate("/login");

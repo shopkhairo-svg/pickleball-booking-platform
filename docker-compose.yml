@@ -16,14 +16,14 @@ services:
   # --- MongoDB ---
   mongo:
     image: mongo:7
-    container_name: pickleball-mongo
+    container_name: system-mongo
     restart: unless-stopped
     ports:
       - "27018:27017"
     volumes:
       - mongo-data:/data/db
     networks:
-      - pickleball-net
+      - system-net
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
@@ -34,12 +34,12 @@ services:
   # --- Redis ---
   redis:
     image: redis:7-alpine
-    container_name: pickleball-redis
+    container_name: system-redis
     restart: unless-stopped
     volumes:
       - redis-data:/data
     networks:
-      - pickleball-net
+      - system-net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -52,7 +52,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: pickleball-backend
+    container_name: system-backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
@@ -62,6 +62,7 @@ services:
       REDIS_URL: redis://redis:6379
       # Cho phép frontend container truy cập API
       FRONTEND_URL: http://localhost
+      TRUST_PROXY: "1"
     ports:
       - "5001:5000"   # Ánh xạ ra cổng 5001 ở máy host để tránh trùng với backend đang chạy local (port 5000)
     depends_on:
@@ -70,7 +71,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - pickleball-net
+      - system-net
 
   # --- Frontend (React + Nginx) ---
   frontend:
@@ -81,14 +82,14 @@ services:
         # Vite cần bake URL vào bundle lúc build
         VITE_API_BASE_URL: /api
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
-    container_name: pickleball-frontend
+    container_name: system-frontend
     restart: unless-stopped
     ports:
       - "80:80"       # truy cập http://localhost
     depends_on:
       - backend
     networks:
-      - pickleball-net
+      - system-net
 
 # ---- Volumes ----
 volumes:
@@ -99,5 +100,5 @@ volumes:
 
 # ---- Networks ----
 networks:
-  pickleball-net:
+  system-net:
     driver: bridge

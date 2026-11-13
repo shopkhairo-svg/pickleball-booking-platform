@@ -1,5 +1,6 @@
 // src/services/auth.service.js
 import axiosClient from "../api/axios";
+import { useAuthStore } from "../store/authStore";
 
 export const authService = {
     // 1. Luồng đăng nhập bằng Form thường (Email + Password)
@@ -38,6 +39,7 @@ export const authService = {
         } finally {
             // Dù Backend có lỗi hay không, Frontend vẫn phải xóa sạch token local để đảm bảo an toàn
             localStorage.removeItem("refreshToken");
+            useAuthStore.getState().clearAuth();
             // Trình kích hoạt xóa kho đồ Zustand sẽ được gọi ở component giao diện sau
         }
     },

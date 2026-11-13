@@ -272,20 +272,25 @@ class AdminService {
      * Admin xác nhận booking (PENDING → CONFIRMED)
      */
     async confirmBooking(bookingId) {
-        const booking = await adminRepository.findBookingById(bookingId);
-        if (!booking) throw new Error("Đơn đặt sân không tồn tại!");
-
-        if (booking.status !== "PENDING") {
-            throw new Error(`Chỉ có thể xác nhận đơn ở trạng thái PENDING! Hiện tại: ${booking.status}`);
-        }
-
-        booking.status = "CONFIRMED";
-        await booking.save();
+        const candidate = await Booking.findById(bookingId);
+        if (!candidate || new Date(`${candidate.bookingDate}T${candidate.startTime}:00+07:00`) <= new Date()) throw new Error("Đơn không tồn tại hoặc giờ chơi đã bắt đầu.");
+        const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "PENDING" }, { $set: { status: "CONFIRMED" } }, { new: true });
+        if (!booking) throw new Error("Chỉ được xác nhận đơn đang chờ duyệt.");
+        await notificationService.createForUser({ userId: booking.userId, title: "Lịch đặt sân đã được xác nhận", message: `Đơn ${booking.bookingCode}: ${booking.startTime} ngày ${booking.bookingDate}. Thanh toán tại sân.`, type: "BOOKING", referenceId: booking._id, referenceType: "Booking" }).catch(error => console.error("[Booking] Notification:", error.message));
 
         return {
             message: "Xác nhận đơn đặt sân thành công!",
             booking
         };
+    }
+
+    async recordCashPayment(bookingId, adminId) {
+        const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "UNPAID" }, {
+            $set: { paymentStatus: "PAID", paidAt: new Date(), paymentRecordedBy: adminId }
+        }, { new: true });
+        if (!booking) throw new Error("Chỉ ghi nhận tiền mặt cho đơn đã xác nhận và chưa thanh toán.");
+        // CASH is collected at the court; it must not increase a fictitious online escrow wallet.
+        return { message: "Đã ghi nhận thu tiền tại sân.", booking };
     }
 
     async completeBooking(bookingId) {
@@ -306,15 +311,16 @@ class AdminService {
             throw new Error(`Chưa thể hoàn tất đơn này! Lượt chơi kết thúc lúc ${booking.endTime} ngày ${booking.bookingDate}, hãy đợi hết giờ.`);
         }
 
+        const completed = await Booking.findOneAndUpdate({ _id: booking._id, status: "CONFIRMED", paymentStatus: "PAID" }, { $set: { status: "COMPLETED" } });
+        if (!completed) throw new Error("Đơn đã thay đổi. Vui lòng tải lại.");
         booking.status = "COMPLETED";
-        await booking.save();
 
         await revenueService.releaseBookingRevenue(booking);
 
         await notificationService.createForUser({
             userId: booking.userId._id || booking.userId,
             title: "Lượt chơi đã hoàn tất",
-            message: `Đơn ${booking.bookingCode} đã hoàn tất. Bạn có thể đánh giá sân để nhận điểm thưởng.`,
+            message: `Đơn ${booking.bookingCode} đã hoàn tất. Bạn có thể đánh giá sân để chia sẻ trải nghiệm.`,
             type: "BOOKING",
             referenceId: booking._id,
             referenceType: "Booking"
@@ -337,9 +343,13 @@ class AdminService {
             throw new Error(`Đơn này đã ở trạng thái "${booking.status}", không thể hủy!`);
         }
 
+        const cancelled = await Booking.findOneAndUpdate({ _id: booking._id, status: booking.status, paymentStatus: booking.paymentStatus },
+            { $set: { status: "CANCELLED", cancelReason: cancelReason || "Cancelled" } }, { new: true });
+        if (!cancelled) throw new Error("Booking changed; reload before cancelling.");
+
         // 1. Nhả slot giờ
         await CourtSlot.findOneAndUpdate(
-            { courtId: booking.courtId, date: booking.bookingDate, startTime: booking.startTime },
+            { bookingId: booking._id, ...(booking.slotId ? { _id: booking.slotId } : {}) },
             { $set: { isBooked: false, bookingId: null } }
         );
 

@@ -1,3 +1,4 @@
+import { createCoreBooking } from "./createBooking.service.js";
 // src/services/booking.service.js (MÔI TRƯỜNG BACKEND)
 import bookingRepository from "../repositories/booking.repository.js";
 import Booking from "../models/booking.model.js";
@@ -5,10 +6,6 @@ import courtRepository from "../repositories/court.repository.js";
 import equipmentRepository from "../repositories/equipment.repository.js"; // 🎯 Import kho vật tư
 import BookingEquipment from "../models/bookingEquipment.model.js"; // Bảng trung gian lưu vết thuê
 import CourtSlot from "../models/courtSlot.model.js";
-import SubCourt from "../models/subCourt.model.js";
-import Equipment from "../models/equipment.model.js";
-import mongoose from "mongoose";
-import { randomUUID } from "crypto"; // ✅ Fix #2: dùng UUID thay vì timestamp để tránh trùng bookingCode
 import couponService from "./coupon.service.js";
 import pointsService from "./points.service.js";
 import revenueService from "./revenue.service.js";
@@ -27,235 +24,7 @@ class BookingService {
      * Động cơ đặt sân gốc + Thuê vật tư đi kèm (Atomic Lock + Tồn kho an toàn)
      */
     async createNewBooking(userId, payload) {
-        const { slotId, equipments = [], paymentMethod = "CASH", note = "", couponCode = "", pointsToUse = 0 } = payload;
-
-        if (!slotId) throw new Error("Vui lòng chọn chính xác một ô giờ trống trên sơ đồ!");
-
-        // 🎯 ATOMIC LOCK: Khóa sân chống trùng lịch
-        const objectIdSlot = new mongoose.Types.ObjectId(slotId);
-        const slotCheck = await CourtSlot.findById(objectIdSlot);
-        if (!slotCheck) {
-            throw new Error("Khung giờ không tồn tại!");
-        }
-
-        const nowStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
-        const slotDateTimeStr = `${slotCheck.date} ${slotCheck.startTime}:00`;
-        if (slotDateTimeStr < nowStr) {
-            throw new Error("Khung giờ này đã trôi qua, không thể đặt lịch!");
-        }
-
-        const slot = await CourtSlot.findOneAndUpdate(
-            { _id: objectIdSlot, isBooked: false },
-            { $set: { isBooked: true } },
-            { new: true }
-        );
-
-        if (!slot) {
-            throw new Error("Khung giờ này vừa mới có người nhanh tay đặt lịch mất rồi! Vui lòng chọn ô giờ khác.");
-        }
-
-        // Kiểm tra xem SubCourt của slot này có đang bảo trì không
-        const subCourt = await SubCourt.findById(slot.subCourtId);
-        if (!subCourt || subCourt.status !== "AVAILABLE") {
-            // Hoàn tác (rollback) đặt slot
-            await CourtSlot.findByIdAndUpdate(slotId, { $set: { isBooked: false, bookingId: null } });
-            throw new Error("Sân nhỏ này đang trong trạng thái bảo trì hoặc không khả dụng!");
-        }
-
-        // ✅ Fix #2: Dùng randomUUID() thay vì timestamp để bookingCode không bao giờ trùng
-        // UUID v4 đảm bảo uniqueness toàn cục, kể cả khi nhiều request đến trong cùng 1ms
-        const bookingCode = `BK-${randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
-        const rollbackEquipmentList = []; // Mảng lưu vết để hoàn tác tồn kho nếu sập nguồn giữa chừng
-
-        try {
-            // 1. Tính toán chi phí tiền sân cơ sở
-            const court = await courtRepository.findById(slot.courtId);
-            if (!court) throw new Error("Cụm sân thể thao lớn không tồn tại trên hệ thống!");
-
-            const courtPrice = court.pricePerHour;
-            const durationHours = court.slotDuration / 60 || 1;
-            const baseCourtTotalPrice = courtPrice * durationHours;
-
-            // 2. ⚡ LUỒNG XỬ LÝ THUÊ VẬT TƯ ĐI KÈM
-            let equipmentTotalPrice = 0;
-            const equipmentRecordsToInsert = [];
-
-            for (const item of equipments) {
-                const eq = await equipmentRepository.findById(item.equipmentId);
-                if (!eq || eq.status !== "AVAILABLE") {
-                    throw new Error(`Thiết bị vật tư hiện không sẵn sàng cho thuê!`);
-                }
-
-                // Tính số lượng đã được thuê trong khung giờ của slot này
-                const overlappingBookings = await Booking.find({
-                    status: { $in: ["PENDING", "CONFIRMED", "COMPLETED"] },
-                    bookingDate: slot.date,
-                    startTime: { $lt: slot.endTime },
-                    endTime: { $gt: slot.startTime }
-                });
-                const overlappingBookingIds = overlappingBookings.map(b => b._id);
-                
-                const rentedEquipments = await BookingEquipment.find({
-                    bookingId: { $in: overlappingBookingIds },
-                    equipmentId: eq._id,
-                    returnStatus: "RENTING"
-                });
-                const rentedQtyAtSlot = rentedEquipments.reduce((sum, re) => sum + re.quantity, 0);
-
-                const effectiveAvailable = eq.availableQuantity - (eq.maintenanceQuantity || 0);
-                const rentableQuantity = effectiveAvailable - rentedQtyAtSlot;
-                if (rentableQuantity < item.quantity) {
-                    throw new Error(`Thiết bị "${eq.name}" trong khung giờ ${slot.startTime}-${slot.endTime} chỉ còn ${rentableQuantity} cái khả dụng!`);
-                }
-
-                // Thuật toán tính tiền: Theo giờ (HOUR) thì nhân durationHours, theo lượt (TURN) thì giữ nguyên
-                const itemSubtotal = eq.rentalType === "HOUR"
-                    ? eq.rentalPrice * item.quantity * durationHours
-                    : eq.rentalPrice * item.quantity;
-
-                equipmentTotalPrice += itemSubtotal;
-
-                // Lưu cấu trúc chuẩn bị ném vào bảng BookingEquipment
-                equipmentRecordsToInsert.push({
-                    equipmentId: eq._id,
-                    quantity: item.quantity,
-                    rentalPrice: eq.rentalPrice,
-                    subtotal: itemSubtotal,
-                    returnStatus: "RENTING"
-                });
-            }
-
-            // 3. Cộng dồn tài chính toàn diện hóa đơn (Tiền sân + Tiền thiết bị + 5% Phí dịch vụ)
-            const finalShippingFee = 0;
-            const systemFee = Math.round((baseCourtTotalPrice + equipmentTotalPrice) * 0.05);
-            const subtotalBeforeDiscount = baseCourtTotalPrice + equipmentTotalPrice + systemFee + finalShippingFee;
-
-            let coupon = null;
-            let couponDiscount = 0;
-            if (couponCode) {
-                const validatedCoupon = await couponService.validateCoupon(userId, {
-                    code: couponCode,
-                    orderValue: subtotalBeforeDiscount,
-                    courtId: slot.courtId
-                });
-                coupon = validatedCoupon.coupon;
-                couponDiscount = validatedCoupon.discountAmount;
-            }
-
-            const maxPointDiscount = Math.max(0, subtotalBeforeDiscount - couponDiscount);
-            const requestedPoints = parseInt(pointsToUse, 10) || 0;
-            const maxPointsByOrder = Math.floor(maxPointDiscount / (parseInt(process.env.POINT_TO_VND || "1000", 10)));
-            const finalPointsToUse = Math.min(requestedPoints, maxPointsByOrder);
-            let pointDiscount = 0;
-            if (finalPointsToUse > 0) {
-                const { wallet, pointToVnd } = await pointsService.getWallet(userId);
-                if (wallet.balance < finalPointsToUse) {
-                    throw new Error(`Ví điểm chỉ còn ${wallet.balance} điểm, không đủ để sử dụng!`);
-                }
-                pointDiscount = finalPointsToUse * pointToVnd;
-            }
-
-            const discount = couponDiscount + pointDiscount;
-            const totalPrice = Math.max(0, subtotalBeforeDiscount - discount);
-
-            // 4. Gọi tầng Repository tạo đơn Booking chính thức
-            const booking = await bookingRepository.create({
-                bookingCode,
-                userId,
-                slotId: slot._id, // ✅ Fix #3: Lưu slotId để rollback chính xác khi cancel
-                courtId: slot.courtId,
-                bookingDate: slot.date,
-                startTime: slot.startTime,
-                endTime: slot.endTime,
-                durationHours,
-                courtPrice: baseCourtTotalPrice,
-                equipmentPrice: equipmentTotalPrice,
-                systemFee,
-                couponId: coupon?._id || null,
-                couponCode: coupon?.code || null,
-                pointDiscount,
-                pointsUsed: finalPointsToUse,
-                discount,
-                totalPrice,
-                paymentStatus: "UNPAID",
-                paymentMethod,
-                status: "PENDING",
-                note
-            });
-
-            if (coupon) {
-                await couponService.applyUsage({
-                    coupon,
-                    userId,
-                    bookingId: booking._id,
-                    discountAmount: couponDiscount
-                });
-            }
-
-            if (finalPointsToUse > 0) {
-                await pointsService.spend(userId, finalPointsToUse, {
-                    referenceId: booking._id,
-                    referenceType: "Booking",
-                    description: `Sử dụng điểm cho đơn ${booking.bookingCode}`
-                });
-            }
-
-            // 5. Đổ mảng vật tư vào bảng trung gian BookingEquipment (Nếu khách có chọn thuê)
-            if (equipmentRecordsToInsert.length > 0) {
-                const finalEquipmentRecords = equipmentRecordsToInsert.map(record => ({
-                    ...record,
-                    bookingId: booking._id
-                }));
-                await BookingEquipment.insertMany(finalEquipmentRecords);
-            }
-
-            // Găm ngược ID Booking vào ô giờ
-            slot.bookingId = booking._id;
-            await slot.save();
-
-            await notificationService.createForAdmins({
-                title: "Có đơn đặt sân mới",
-                message: `Đơn ${bookingCode} vừa được tạo với tổng tiền ${totalPrice.toLocaleString("vi-VN")}đ.`,
-                type: "BOOKING",
-                referenceId: booking._id,
-                referenceType: "Booking",
-                sendMail: true
-            });
-
-            if (court.vendorId) {
-                await notificationService.createForUser({
-                    userId: court.vendorId,
-                    title: "Có đơn đặt sân mới tại cụm sân của bạn",
-                    message: `Đơn ${bookingCode} vừa được đặt tại sân ${court.name} với tổng tiền ${totalPrice.toLocaleString("vi-VN")}đ.`,
-                    type: "BOOKING",
-                    referenceId: booking._id,
-                    referenceType: "Booking",
-                    sendMail: true
-                });
-            }
-
-            return {
-                message: "Khởi tạo đơn đặt sân và thuê vật tư thành công rực rỡ!",
-                bookingCode,
-                bookingId: booking._id,
-                totalPrice,
-                courtPrice: baseCourtTotalPrice,
-                equipmentPrice: equipmentTotalPrice,
-                discount,
-                couponDiscount,
-                pointDiscount,
-                pointsUsed: finalPointsToUse
-            };
-
-        } catch (error) {
-            // 🛡️ LUỒNG HOÀN TÁC TOÀN DIỆN (ROLLBACK MECHANISM)
-            // 1. Nhả lại slot giờ sang trống tránh treo sân
-            await CourtSlot.findByIdAndUpdate(slotId, { $set: { isBooked: false, bookingId: null } });
-
-            // 2. Không cần hoàn trả lại số lượng thiết bị vào kho vì thiết bị chỉ được check slot-based
-            // (rollbackEquipmentList trống)
-            throw error;
-        }
+        return createCoreBooking(userId, payload);
     }
     async getUserBookingHistory(userId) {
         if (!userId) throw new Error("Mã định danh người dùng không hợp lệ!");
@@ -321,17 +90,14 @@ class BookingService {
             throw new Error("Vi phạm chính sách: Bạn chỉ được quyền hủy đặt lịch trước giờ thi đấu tối thiểu 36 tiếng!");
         }
 
+        const cancelled = await Booking.findOneAndUpdate({ _id: booking._id, status: booking.status, paymentStatus: booking.paymentStatus },
+            { $set: { status: "CANCELLED", cancelReason: cancelReason || "Cancelled" } }, { new: true });
+        if (!cancelled) throw new Error("Booking changed; reload before cancelling.");
+
         // 3. 🛡️ TIẾN HÀNH HOÀN TÁC HỆ THỐNG (BẮT ĐẦU ROLLBACK DATA)
         // Bước A: ✅ Fix #3 — Dùng booking.slotId để unlock đúng slot, tránh unlock nhầm SubCourt khác
-        if (booking.slotId) {
-            await CourtSlot.findByIdAndUpdate(booking.slotId, { $set: { isBooked: false, bookingId: null } });
-        } else {
-            // Fallback cho các booking cũ chưa có slotId
-            await CourtSlot.findOneAndUpdate(
-                { courtId: booking.courtId, date: booking.bookingDate, startTime: booking.startTime },
-                { $set: { isBooked: false, bookingId: null } }
-            );
-        }
+        await CourtSlot.updateOne({ bookingId: booking._id, ...(booking.slotId ? { _id: booking.slotId } : {}) },
+            { $set: { isBooked: false, bookingId: null } });
 
         // Bước B: Hoàn trả lại số lượng tồn kho vật tư (Nếu đơn này có thuê đồ kèm)
         if (booking.equipmentPrice > 0) {
@@ -475,6 +241,7 @@ class BookingService {
             // Tìm tất cả booking CONFIRMED đã quá giờ chơi
             const expiredBookings = await Booking.find({
                 status: "CONFIRMED",
+                paymentStatus: "PAID",
                 $or: [
                     { bookingDate: { $lt: currentDate } },
                     { bookingDate: currentDate, endTime: { $lte: currentTime } }
@@ -484,8 +251,8 @@ class BookingService {
             if (expiredBookings.length > 0) {
                 console.log(`[Auto-Complete] Phát hiện ${expiredBookings.length} booking đã qua thời gian chơi. Đang tự động hoàn tất...`);
                 for (const booking of expiredBookings) {
-                    booking.status = "COMPLETED";
-                    await booking.save();
+                    const completed = await Booking.findOneAndUpdate({ _id: booking._id, status: "CONFIRMED", paymentStatus: "PAID" }, { $set: { status: "COMPLETED" } });
+                    if (!completed) continue;
 
                     try {
                         await revenueService.releaseBookingRevenue(booking);

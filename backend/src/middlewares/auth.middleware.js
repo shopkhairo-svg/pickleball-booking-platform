@@ -69,7 +69,7 @@ export const verifyToken = async (req, res, next) => {
             req.user = decoded;
             next();
         } catch (err) {
-            return res.status(403).json({ success: false, message: "Token đã hết hạn hoặc không hợp lệ!" });
+            return res.status(401).json({ success: false, message: "Token đã hết hạn hoặc không hợp lệ!" });
         }
 
     } catch (error) {

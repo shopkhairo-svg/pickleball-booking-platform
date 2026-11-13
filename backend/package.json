@@ -7,9 +7,11 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --experimental-test-module-mocks --test test/auth.test.js test/core.test.js",
     "dev": "nodemon src/server.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "test:auth": "node --experimental-test-module-mocks --test test/auth.test.js",
+    "test:integration": "node --test test/booking.integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

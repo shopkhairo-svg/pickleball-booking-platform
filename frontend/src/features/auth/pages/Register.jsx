@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import FormInput from "@/components/FormInput";
 import { authService } from "@/services/auth.service";
-import { useAuthStore } from "@/store/authStore";
+
 
 export default function Register() {
     const [step, setStep] = useState(1);
@@ -15,7 +15,7 @@ export default function Register() {
     const [isLoading, setIsLoading] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
 
-    const setAuth = useAuthStore((state) => state.setAuth);
+
 
     const handleRegisterSubmit = async (event) => {
         event.preventDefault();
@@ -36,7 +36,7 @@ export default function Register() {
 
         try {
             const data = await authService.register(name, email, password);
-            if (data) setStep(2);
+            if (data.success) setStep(2);
         } catch (err) {
             setErrorMsg(err.response?.data?.message || "Đăng ký thất bại. Vui lòng thử lại!");
         } finally {
@@ -59,12 +59,10 @@ export default function Register() {
         try {
             const data = await authService.verifyOTP({ email, otpCode });
 
-            if (data) {
-                setAuth(data.user, data.accessToken);
-                localStorage.setItem("refreshToken", data.refreshToken);
+            if (data.success) {
                 setIsSuccess(true);
                 setTimeout(() => {
-                    window.location.href = data.redirectUrl || "/";
+                    window.location.href = "/login";
                 }, 2200);
             }
         } catch (err) {
@@ -160,7 +158,7 @@ export default function Register() {
                                 </div>
                                 <h3 className="mt-5 text-2xl font-black text-on-surface">Tài khoản đã sẵn sàng</h3>
                                 <p className="muted-copy mx-auto mt-2 max-w-sm">
-                                    Hệ thống đang đưa bạn vào PickleballPro để bắt đầu đặt sân.
+                                    Xác minh email thành công. Đang chuyển đến trang đăng nhập.
                                 </p>
                             </div>
                         )}

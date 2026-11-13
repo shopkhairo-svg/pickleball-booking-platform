@@ -27,6 +27,7 @@ router.delete("/courts/:id/images/:publicId", adminController.deleteCourtImage);
 // ======================== BOOKINGS ========================
 router.get("/bookings", adminController.getAllBookings);
 router.put("/bookings/:id/confirm", adminController.confirmBooking);
+router.put("/bookings/:id/cash-payment", adminController.recordCashPayment);
 router.put("/bookings/:id/complete", adminController.completeBooking);
 router.put("/bookings/:id/cancel", adminController.cancelBooking);
 

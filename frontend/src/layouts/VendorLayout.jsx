@@ -1,3 +1,4 @@
+import { authService } from "@/services/auth.service";
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
@@ -8,7 +9,8 @@ export default function VendorLayout() {
     const { user, clearAuth } = useAuthStore();
     const navigate = useNavigate();
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await authService.logout();
         clearAuth();
         navigate("/login");
     };
@@ -37,13 +39,13 @@ export default function VendorLayout() {
             : [
                   {
                       path: "/vendor/equipments",
-                      label: "Cung cấp Thiết bị",
+                      label: "Thiết bị · Đang phát triển",
                       icon: "local_shipping",
                   },
               ]),
         {
             path: "/vendor/maintenance",
-            label: "Bảo trì được giao",
+            label: "Bảo trì · Đang phát triển",
             icon: "build",
         },
         {

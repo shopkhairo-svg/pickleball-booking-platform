@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { randomUUID } from "node:crypto";
 
 class JwtUtils {
     /**
@@ -9,7 +10,7 @@ class JwtUtils {
         return jwt.sign(
             payload,
             process.env.JWT_ACCESS_SECRET,
-            { expiresIn: process.env.JWT_ACCESS_EXPIRATION }
+            { expiresIn: process.env.JWT_ACCESS_EXPIRATION, jwtid: randomUUID() }
         );
     }
 
@@ -21,7 +22,7 @@ class JwtUtils {
         return jwt.sign(
             payload,
             process.env.JWT_REFRESH_SECRET,
-            { expiresIn: process.env.JWT_REFRESH_EXPIRATION }
+            { expiresIn: process.env.JWT_REFRESH_EXPIRATION, jwtid: randomUUID() }
         );
     }
 

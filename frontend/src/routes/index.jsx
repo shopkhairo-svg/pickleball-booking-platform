@@ -1,3 +1,4 @@
+import UnderDevelopment from "../components/UnderDevelopment.jsx";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "../features/auth/pages/Login";
 import Register from "../features/auth/pages/Register";
@@ -12,7 +13,6 @@ import CourtDetail from "../features/court/pages/CourtDetail";
 // 👤 User imports
 import UserProfile from "../features/user/pages/UserProfile.jsx";
 import Favorites from "../features/user/pages/Favorites.jsx";
-import RewardPage from "../features/user/pages/RewardPage.jsx";
 
 // 🛡️ Admin imports
 import ProtectedRoute from "./ProtectedRoute.jsx";
@@ -20,10 +20,7 @@ import AdminLayout from "../layouts/AdminLayout.jsx";
 import Dashboard from "../features/admin/pages/Dashboard.jsx";
 import CourtManagement from "../features/admin/pages/CourtManagement.jsx";
 import BookingManagement from "../features/admin/pages/BookingManagement.jsx";
-import EquipmentManagement from "../features/admin/pages/EquipmentManagement.jsx";
-import MaintenanceManagement from "../features/admin/pages/MaintenanceManagement.jsx";
 import UserManagement from "../features/admin/pages/UserManagement.jsx";
-import CouponManagement from "../features/admin/pages/CouponManagement.jsx";
 import Settings from "../features/admin/pages/Settings.jsx";
 import ReviewManagement from "../features/admin/pages/ReviewManagement.jsx";
 
@@ -31,18 +28,14 @@ import ReviewManagement from "../features/admin/pages/ReviewManagement.jsx";
 import VendorLayout from "../layouts/VendorLayout.jsx";
 import VendorDashboard from "../features/vendor/pages/Dashboard.jsx";
 import VendorCourtManagement from "../features/vendor/pages/CourtManagement.jsx";
-import VendorEquipmentManagement from "../features/vendor/pages/EquipmentManagement.jsx";
 import VendorBookingManagement from "../features/vendor/pages/BookingManagement.jsx";
 import VendorReviews from "../features/vendor/pages/Reviews.jsx";
-import VendorMaintenanceManagement from "../features/vendor/pages/MaintenanceManagement.jsx";
 
 // 🚚 Shipper imports
 import ShipperLayout from "../layouts/ShipperLayout.jsx";
-import ShipperDashboard from "../features/shipper/pages/ShipperDashboard.jsx";
 
 // 🛠️ Maintenance staff imports
 import MaintenanceStaffLayout from "../layouts/MaintenanceStaffLayout.jsx";
-import MaintenanceStaffDashboard from "../features/maintenance-staff/pages/MaintenanceDashboard.jsx";
 
 
 export const router = createBrowserRouter([
@@ -95,7 +88,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "rewards",
-                        element: <RewardPage />,
+                        element: <UnderDevelopment />,
                     },
                 ],
             },
@@ -123,11 +116,11 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "equipments",
-                        element: <EquipmentManagement />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "maintenance",
-                        element: <MaintenanceManagement />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "users",
@@ -135,7 +128,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "coupons",
-                        element: <CouponManagement />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "reviews",
@@ -175,7 +168,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "equipments",
-                        element: <VendorEquipmentManagement />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "reviews",
@@ -183,7 +176,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "maintenance",
-                        element: <VendorMaintenanceManagement />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "profile",
@@ -203,7 +196,7 @@ export const router = createBrowserRouter([
                 children: [
                     {
                         index: true,
-                        element: <ShipperDashboard />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "profile",
@@ -222,7 +215,7 @@ export const router = createBrowserRouter([
                 children: [
                     {
                         index: true,
-                        element: <MaintenanceStaffDashboard />,
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "profile",

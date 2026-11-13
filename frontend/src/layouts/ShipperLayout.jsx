@@ -1,3 +1,4 @@
+import { authService } from "@/services/auth.service";
 import { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
@@ -8,7 +9,8 @@ export default function ShipperLayout() {
     const { user, clearAuth } = useAuthStore();
     const navigate = useNavigate();
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await authService.logout();
         clearAuth();
         navigate("/login");
     };

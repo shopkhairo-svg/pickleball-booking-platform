@@ -3,8 +3,8 @@ import authController from "../controllers/auth.controller.js";
 
 // Nhập các tấm khiên bảo vệ từ tầng Middlewares đã viết
 import { verifyToken } from "../middlewares/auth.middleware.js";
-import { authLimiter } from "../middlewares/rateLimiter.middleware.js";
-import { loginValidator,registerValidator, handleValidationErrors, forgotPasswordValidator, resetPasswordValidator } from "../middlewares/validation.middleware.js";
+import { authLimiter, globalLimiter } from "../middlewares/rateLimiter.middleware.js";
+import { verifyOtpValidator, googleLoginValidator, refreshTokenValidator, loginValidator,registerValidator, handleValidationErrors, forgotPasswordValidator, resetPasswordValidator } from "../middlewares/validation.middleware.js";
 
 const router = express.Router();
 
@@ -26,6 +26,8 @@ router.post(
 router.post(
     "/google-login",
     authLimiter,
+    googleLoginValidator,
+    handleValidationErrors,
     (req, res) => authController.googleLogin(req, res)
 );
 
@@ -41,7 +43,7 @@ router.post(
     (req, res) => authController.register(req, res)
 );
 
-router.post("/verify-otp", handleValidationErrors,
+router.post("/verify-otp", authLimiter, verifyOtpValidator, handleValidationErrors,
     (req, res) => authController.verifyOTP(req, res)
 );
 
@@ -84,6 +86,9 @@ router.put(
  */
 router.post(
     "/refresh-token",
+    globalLimiter,
+    refreshTokenValidator,
+    handleValidationErrors,
     (req, res) => authController.refreshToken(req, res)
 );
 

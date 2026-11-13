@@ -1,6 +1,7 @@
 // src/services/auth.service.js
 import userRepository from "../repositories/user.repository.js";
 import bcrypt from "bcryptjs";
+import { randomInt, randomBytes } from "node:crypto";
 import redisClient from "../config/redis.js";
 // Import file tiện ích vừa tách
 import jwtUtil from "../utils/jwt.util.js";
@@ -46,7 +47,7 @@ class AuthService {
         const refreshToken = jwtUtil.generateRefreshToken({ id: user._id });
 
         // Lưu whitelist trên Redis
-        await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", 7 * 24 * 60 * 60);
+        await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", Math.max(1, jwtUtil.verifyRefreshToken(refreshToken).exp - Math.floor(Date.now() / 1000)));
 
         await userRepository.updateLastLogin(user);
         const redirectUrl = this.getRedirectUrl(user);
@@ -70,7 +71,7 @@ class AuthService {
 
         // 3. Nếu chưa tồn tại tài khoản -> Tự động tạo mới (Đăng ký tự động)
         if (!user) {
-            const dummyPassword = await bcrypt.hash(Math.random().toString(36).slice(-10), 10);
+            const dummyPassword = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
             user = await userRepository.create({
                 fullName: name,
                 email,
@@ -91,7 +92,7 @@ class AuthService {
         const refreshToken = jwtUtil.generateRefreshToken({ id: user._id });
 
         // 6. Lưu phiên vào Redis Whitelist
-        await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", 7 * 24 * 60 * 60);
+        await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", Math.max(1, jwtUtil.verifyRefreshToken(refreshToken).exp - Math.floor(Date.now() / 1000)));
 
         // 7. Lưu lịch sử login và trả về kết quả
         await userRepository.updateLastLogin(user); //
@@ -147,7 +148,7 @@ class AuthService {
     //     const refreshToken = jwtUtil.generateRefreshToken({ id: user._id });
     //
     //     // 5. Lưu phiên vào Redis Whitelist (Hết hạn sau 7 ngày giống luồng Login)
-    //     await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", 7 * 24 * 60 * 60);
+    //     await redisClient.set(`refresh:${user._id}`, refreshToken, "EX", Math.max(1, jwtUtil.verifyRefreshToken(refreshToken).exp - Math.floor(Date.now() / 1000)));
     //
     //     // 6. Cập nhật lịch sử đăng nhập cuối cùng
     //     await userRepository.updateLastLogin(user);
@@ -157,6 +158,7 @@ class AuthService {
     // }
 
     async registerStep1({ fullName, email, password }) {
+        mailUtil.assertConfigured();
         // 1. Check xem email đã được ai đăng ký chính thức chưa
         const existingUser = await userRepository.findByEmail(email);
         if (existingUser) {
@@ -164,7 +166,7 @@ class AuthService {
         }
 
         // 2. Sinh mã OTP ngẫu nhiên 6 chữ số
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = randomInt(100000, 1000000).toString();
 
         // 3. Mã hóa mật khẩu ngay từ bước này luôn cho an toàn
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -181,7 +183,12 @@ class AuthService {
         await redisClient.set(redisKey, JSON.stringify(registerPayload), "EX", 5 * 60);
 
         // 5. Bắn mail OTP cho khách (Hàm gửi mail bạn tự viết trong mailUtil nhé)
-        await mailUtil.sendOTPEmail(email, fullName, otp);
+        try {
+            await mailUtil.sendOTPEmail(email, fullName, otp);
+        } catch (error) {
+            await redisClient.del(redisKey);
+            throw error;
+        }
 
         return true;
     }
@@ -220,6 +227,7 @@ class AuthService {
      * Logic Tạo mã OTP khôi phục mật khẩu và gửi EMAIL cho khách hàng
      */
     async generateForgotPasswordOTP(email) {
+        mailUtil.assertConfigured();
         const user = await userRepository.findByEmail(email);
         if (!user) {
             throw new Error("Địa chỉ email không tồn tại trên hệ thống!");
@@ -238,7 +246,7 @@ class AuthService {
         }
 
         // Sinh mã OTP ngẫu nhiên 6 chữ số
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = randomInt(100000, 1000000).toString();
 
         // Lưu OTP vào Redis trong vòng 5 phút (300 giây)
         const otpKey = `forgot-password-otp:${email}`;
@@ -252,7 +260,13 @@ class AuthService {
         }
 
         // Gửi email OTP
-        await mailUtil.sendForgotPasswordOTPEmail(email, user.fullName, otp);
+        try {
+            await mailUtil.sendForgotPasswordOTPEmail(email, user.fullName, otp);
+        } catch (error) {
+            await redisClient.del(otpKey);
+            await redisClient.decr(countKey);
+            throw error;
+        }
 
         return true;
     }
@@ -283,6 +297,7 @@ class AuthService {
 
         // Xóa OTP khỏi Redis sau khi sử dụng thành công (chỉ dùng 1 lần)
         await redisClient.del(otpKey);
+        await redisClient.del(`refresh:${user._id}`);
 
         return true;
     }
@@ -296,7 +311,8 @@ class AuthService {
         }
         if (accessToken) {
             // Đưa Access Token cũ vào danh sách đen trong vòng 15 phút (bằng thời gian sống của nó)
-            await redisClient.set(`blacklist:${accessToken}`, "true", "EX", 15 * 60);
+            const remaining = jwtUtil.verifyAccessToken(accessToken).exp - Math.floor(Date.now() / 1000);
+            if (remaining > 0) await redisClient.set(`blacklist:${accessToken}`, "true", "EX", remaining);
         }
         return true;
     }

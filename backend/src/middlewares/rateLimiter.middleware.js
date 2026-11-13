@@ -27,11 +27,11 @@ export const globalLimiter = rateLimit({
 
 /**
  * 2. Auth Limiter: Bảo vệ nghiêm ngặt các API nhạy cảm (Login, Register, Google Login)
- * Tối đa 5 lần thử từ 1 địa chỉ IP trong vòng 15 phút để chống tấn công Brute Force dò mật khẩu.
+ * Tối đa 30 yêu cầu từ 1 địa chỉ IP trong vòng 15 phút.
  */
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // Khoảng thời gian: 15 phút
-    limit: 1000, // Giới hạn tối đa 5 lần gửi request
+    limit: 30,
     standardHeaders: "draft-7",
     legacyHeaders: false,
 

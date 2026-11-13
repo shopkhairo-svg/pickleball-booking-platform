@@ -1,6 +1,14 @@
 import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema({
+    startsAt: Date,
+    reminderSentAt: Date,
+    reminderLeaseUntil: Date,
+    reminderClaim: String,
+    reminderRetryAt: Date,
+    reminderAttempts: { type: Number, default: 0 },
+    paidAt: Date,
+    paymentRecordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
     bookingCode: {
         type: String,
@@ -144,6 +152,7 @@ const bookingSchema = new mongoose.Schema({
 
 
 // INDEXES
+bookingSchema.index({ status: 1, bookingDate: 1, reminderSentAt: 1 });
 bookingSchema.index({
     userId: 1
 });

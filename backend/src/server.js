@@ -17,7 +17,11 @@ import pointsRoutes from "./routes/points.routes.js";
 import shipperRoutes from "./routes/shipper.routes.js";
 import maintenanceStaffRoutes from "./routes/maintenanceStaff.routes.js";
 
+import { developmentGate } from "./middlewares/development.middleware.js";
+import { startBookingReminders } from "./services/bookingReminder.service.js";
+
 const app = express();
+if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
 // ✅ Fix #13: CORS whitelist theo FRONTEND_URL env var, không mở cho mọi origin
 // Trong production: set FRONTEND_URL=https://your-domain.com
@@ -40,6 +44,7 @@ app.use(cors({
     credentials: true // Cho phép gửi cookie (cần cho httpOnly refreshToken sau này)
 }));
 app.use(express.json());
+app.use("/api", developmentGate);
 
 // 1. Kết nối DB (Bắt buộc dùng await để đảm bảo DB sẵn sàng trước khi mở cổng)
 await connectDB(); //
@@ -50,6 +55,7 @@ await systemSettingService.initializeSettings();
 // ✅ Fix #5: Khởi động Slot Scheduler — tự động sinh slot rolling 30 ngày mỗi ngày
 import { startSlotScheduler } from "./utils/slotScheduler.js";
 startSlotScheduler();
+startBookingReminders();
 
 // Tự động quét và hoàn tất các booking đã qua giờ chơi + cập nhật trả thiết bị định kỳ
 import bookingService from "./services/booking.service.js";

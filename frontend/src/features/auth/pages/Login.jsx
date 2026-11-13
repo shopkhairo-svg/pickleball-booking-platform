@@ -4,6 +4,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import FormInput from "@/components/FormInput";
 import { authService } from "@/services/auth.service";
 import { useAuthStore } from "@/store/authStore";
+import { isGoogleConfigured } from "@/config/googleAuth";
 
 export default function Login() {
     const [email, setEmail] = useState("");
@@ -114,7 +115,7 @@ export default function Login() {
                         </div>
 
                         <div className="flex justify-center">
-                            <GoogleLogin
+                            {isGoogleConfigured ? <GoogleLogin
                                 onSuccess={async (credentialResponse) => {
                                     setErrorMsg("");
                                     try {
@@ -130,8 +131,8 @@ export default function Login() {
                                 text="signin_with"
                                 theme="outline"
                                 size="large"
-                                width="100%"
-                            />
+                                width="320"
+                            /> : <p className="text-sm text-on-surface-variant">Đăng nhập Google tạm thời chưa khả dụng. Vui lòng dùng email và mật khẩu.</p>}
                         </div>
                     </div>
                 </section>

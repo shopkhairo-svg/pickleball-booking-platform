@@ -4,7 +4,7 @@ import { body, param, query, validationResult } from "express-validator";
  * 1. Mảng định nghĩa quy tắc kiểm tra (Validation Rules) dành riêng cho cổng Đăng nhập
  */
 export const loginValidator = [
-    body("email")
+    body("email").trim().toLowerCase()
         .notEmpty().withMessage("Email không được để trống!")
         .isEmail().withMessage("Email không đúng định dạng tài khoản hợp lệ!")
         .trim()
@@ -29,7 +29,7 @@ export const handleValidationErrors = (req, res, next) => {
         return res.status(400).json({
             success: false,
             message: firstErrorMessage,
-            errors: errors.array() // Trả thêm mảng full chi tiết lỗi nếu Frontend cần map vào từng ô Input
+            errors: errors.array().map(({ value, ...detail }) => detail) // Trả thêm mảng full chi tiết lỗi nếu Frontend cần map vào từng ô Input
         });
     }
 
@@ -40,11 +40,11 @@ export const handleValidationErrors = (req, res, next) => {
  * 3. Quy tắc kiểm tra dữ liệu đầu vào cho cổng Đăng ký (Register)
  */
 export const registerValidator = [
-    body("fullName")
+    body("fullName").trim()
         .notEmpty().withMessage("Họ và tên không được để trống!")
         .isLength({ min: 2, max: 100 }).withMessage("Họ và tên phải từ 2 đến 100 ký tự!"),
 
-    body("email")
+    body("email").trim().toLowerCase()
         .notEmpty().withMessage("Email không được để trống!")
         .isEmail().withMessage("Email không đúng định dạng hợp lệ!")
         .trim()
@@ -59,7 +59,7 @@ export const registerValidator = [
  * 4. Quy tắc kiểm tra dữ liệu cho cổng Quên mật khẩu (Forgot Password)
  */
 export const forgotPasswordValidator = [
-    body("email")
+    body("email").trim().toLowerCase()
         .notEmpty().withMessage("Vui lòng nhập địa chỉ Email của bạn!")
         .isEmail().withMessage("Địa chỉ Email không đúng định dạng hợp lệ!")
         .trim()
@@ -69,7 +69,7 @@ export const forgotPasswordValidator = [
  * 5. Quy tắc kiểm tra dữ liệu đầu vào cho cổng Đổi mật khẩu mới (Reset Password)
  */
 export const resetPasswordValidator = [
-    body("email")
+    body("email").trim().toLowerCase()
         .notEmpty().withMessage("Email không được để trống!")
         .isEmail().withMessage("Email không đúng định dạng hợp lệ!")
         .trim()
@@ -77,7 +77,7 @@ export const resetPasswordValidator = [
 
     body("otpCode")
         .notEmpty().withMessage("Vui lòng nhập mã OTP xác thực!")
-        .isLength({ min: 6, max: 6 }).withMessage("Mã OTP bắt buộc phải gồm 6 chữ số!"),
+        .matches(/^\d{6}$/).withMessage("Mã OTP bắt buộc phải gồm 6 chữ số!"),
 
     body("newPassword")
         .notEmpty().withMessage("Mật khẩu mới không được để trống!")
@@ -160,4 +160,15 @@ export const bookingCreateValidator = [
 
 export const recentViewQueryValidator = [
     query("guestId").optional({ checkFalsy: true }).isLength({ max: 100 }).withMessage("Guest ID không hợp lệ!")
+];
+
+export const verifyOtpValidator = [
+    body("email").trim().toLowerCase().isEmail().withMessage("Email không hợp lệ!"),
+    body("otpCode").isString().bail().matches(/^\d{6}$/).withMessage("OTP phải gồm 6 chữ số!")
+];
+export const googleLoginValidator = [
+    body("idToken").isString().bail().notEmpty().withMessage("Thiếu Google ID token!")
+];
+export const refreshTokenValidator = [
+    body("refreshToken").isString().bail().notEmpty().withMessage("Thiếu refresh token!")
 ];
