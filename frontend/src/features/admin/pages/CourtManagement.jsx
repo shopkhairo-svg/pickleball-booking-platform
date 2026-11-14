@@ -1,5 +1,5 @@
 // src/features/admin/pages/CourtManagement.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import adminService from "../../../services/adminService";
 
 const statusColors = {
@@ -13,6 +13,8 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
         name: court?.name || "",
         location: court?.location || "",
         address: court?.address || "",
+        latitude: court?.latitude ?? "",
+        longitude: court?.longitude ?? "",
         type: court?.type || "INDOOR",
         description: court?.description || "",
         pricePerHour: court?.pricePerHour || "",
@@ -105,6 +107,11 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
                         />
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label>Vĩ độ (latitude)<input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} className="mt-1 w-full rounded-xl border p-3" /></label>
+                        <label>Kinh độ (longitude)<input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} className="mt-1 w-full rounded-xl border p-3" /></label>
+                    </div>
+                    <p className="text-sm text-gray-500">Nhập cả hai tọa độ để sân xuất hiện trong tìm kiếm gần đây, hoặc để trống cả hai.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Loại sân *</label>
@@ -233,18 +240,12 @@ export default function CourtManagement() {
     const [pagination, setPagination] = useState({});
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
-    const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
     const [editingCourt, setEditingCourt] = useState(null);
-    const [maintenanceCourt, setMaintenanceCourt] = useState(null);
     const [showSubCourtsModal, setShowSubCourtsModal] = useState(false);
     const [selectedCourtForSubCourts, setSelectedCourtForSubCourts] = useState(null);
     const [filters, setFilters] = useState({ page: 1, type: "", status: "", search: "" });
 
-    useEffect(() => {
-        fetchCourts();
-    }, [filters.page, filters.type, filters.status]);
-
-    const fetchCourts = async () => {
+    const fetchCourts = useCallback(async () => {
         try {
             setLoading(true);
             const params = { page: filters.page, limit: 10 };
@@ -259,12 +260,16 @@ export default function CourtManagement() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filters]);
+
+    useEffect(() => {
+        const timer = setTimeout(fetchCourts, 150);
+        return () => clearTimeout(timer);
+    }, [fetchCourts]);
 
     const handleSearch = (e) => {
         e.preventDefault();
         setFilters({ ...filters, page: 1 });
-        fetchCourts();
     };
 
     const handleDelete = async (id) => {
@@ -435,12 +440,10 @@ export default function CourtManagement() {
                                                             </svg>
                                                         </button>
                                                         <button
-                                                            onClick={() => {
-                                                                setMaintenanceCourt(court);
-                                                                setShowMaintenanceModal(true);
-                                                            }}
-                                                            className="p-2 hover:bg-yellow-50 rounded-lg text-yellow-600"
-                                                            title="Bảo trì"
+                                                            disabled
+                                                            className="p-2 rounded-lg text-gray-300 cursor-not-allowed"
+                                                            title="Phiếu bảo trì · Đang phát triển"
+                                                            aria-label="Phiếu bảo trì đang phát triển"
                                                         >
                                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -498,14 +501,6 @@ export default function CourtManagement() {
                 />
             )}
 
-            {showMaintenanceModal && (
-                <CourtMaintenanceModal
-                    court={maintenanceCourt}
-                    onClose={() => { setShowMaintenanceModal(false); setMaintenanceCourt(null); }}
-                    onSave={() => { setShowMaintenanceModal(false); setMaintenanceCourt(null); fetchCourts(); }}
-                />
-            )}
-
             {showSubCourtsModal && selectedCourtForSubCourts && (
                 <SubCourtsManagementModal
                     court={selectedCourtForSubCourts}
@@ -518,196 +513,8 @@ export default function CourtManagement() {
     );
 }
 
-const CourtMaintenanceModal = ({ court, onClose, onSave }) => {
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
-    const [severity, setSeverity] = useState("LOW");
-    const [files, setFiles] = useState([]);
-    const [saving, setSaving] = useState(false);
-
-    const [subCourts, setSubCourts] = useState([]);
-    const [selectedSubCourtIds, setSelectedSubCourtIds] = useState([]);
-    const [loadingSubCourts, setLoadingSubCourts] = useState(false);
-
-    useEffect(() => {
-        const fetchSubCourts = async () => {
-            try {
-                setLoadingSubCourts(true);
-                const res = await adminService.getSubCourts(court._id);
-                setSubCourts(res.subCourts || []);
-                if (res.subCourts && res.subCourts.length > 0) {
-                    setSelectedSubCourtIds(res.subCourts.map(s => s._id));
-                }
-            } catch (err) {
-                console.error("Lỗi khi tải sân nhỏ:", err);
-            } finally {
-                setLoadingSubCourts(false);
-            }
-        };
-        fetchSubCourts();
-    }, [court._id]);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (subCourts.length > 0 && selectedSubCourtIds.length === 0) {
-            alert("Vui lòng chọn ít nhất một sân nhỏ cần bảo trì!");
-            return;
-        }
-        setSaving(true);
-        try {
-            const formData = new FormData();
-            formData.append("targetType", "COURT");
-            formData.append("targetId", court._id);
-            formData.append("title", title);
-            formData.append("description", description);
-            formData.append("severity", severity);
-            if (selectedSubCourtIds.length > 0) {
-                formData.append("subCourtIds", selectedSubCourtIds.join(","));
-            }
-            files.forEach(file => formData.append("images", file));
-            await adminService.createMaintenance(formData);
-            alert("Tạo yêu cầu bảo trì cụm sân thành công! Trạng thái các sân nhỏ đã chọn đã chuyển sang BẢO TRÌ.");
-            onSave();
-        } catch (err) {
-            alert(err?.response?.data?.message || err.message || "Có lỗi xảy ra!");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl w-full max-w-md shadow-xl border">
-                <div className="flex items-center justify-between p-6 border-b">
-                    <h2 className="text-lg font-bold text-gray-800">Yêu cầu bảo trì cụm sân</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Cụm sân</label>
-                        <input
-                            type="text" disabled value={court.name}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Chủ sân tiếp nhận</label>
-                        <input
-                            type="text"
-                            disabled
-                            value={court.vendorId?.fullName ? `${court.vendorId.fullName} (${court.vendorId.email})` : "Chưa gán chủ sân"}
-                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-gray-500"
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Chọn sân nhỏ cần bảo trì *</label>
-                        {loadingSubCourts ? (
-                            <p className="text-xs text-gray-400">Đang tải danh sách sân nhỏ...</p>
-                        ) : subCourts.length === 0 ? (
-                            <p className="text-xs text-red-500">Cụm sân này chưa cấu hình sân nhỏ!</p>
-                        ) : (
-                            <div className="space-y-2 max-h-40 overflow-y-auto p-3 border border-gray-100 rounded-xl bg-gray-50/50">
-                                <label className="flex items-center gap-2 text-xs font-bold text-gray-700 cursor-pointer pb-2 border-b">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedSubCourtIds.length === subCourts.length}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                setSelectedSubCourtIds(subCourts.map(s => s._id));
-                                            } else {
-                                                setSelectedSubCourtIds([]);
-                                            }
-                                        }}
-                                        className="rounded text-primary focus:ring-primary/20"
-                                    />
-                                    <span>Chọn tất cả sân nhỏ ({subCourts.length})</span>
-                                </label>
-                                {subCourts.map((sub) => (
-                                    <label key={sub._id} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer py-0.5">
-                                        <input
-                                            type="checkbox"
-                                            checked={selectedSubCourtIds.includes(sub._id)}
-                                            onChange={(e) => {
-                                                if (e.target.checked) {
-                                                    setSelectedSubCourtIds([...selectedSubCourtIds, sub._id]);
-                                                } else {
-                                                    setSelectedSubCourtIds(selectedSubCourtIds.filter(id => id !== sub._id));
-                                                }
-                                            }}
-                                            className="rounded text-primary focus:ring-primary/20"
-                                        />
-                                        <span>{sub.name} {sub.status === "MAINTENANCE" && <span className="text-[10px] text-amber-600 font-bold">(Đang bảo trì)</span>}</span>
-                                    </label>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Mức độ bảo trì</label>
-                        <select
-                            value={severity}
-                            onChange={(e) => setSeverity(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                        >
-                            <option value="LOW">Thấp (Low)</option>
-                            <option value="MEDIUM">Trung bình (Medium)</option>
-                            <option value="HIGH">Cao (High)</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tiêu đề yêu cầu *</label>
-                        <input
-                            type="text" required value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                            placeholder="Mô tả ngắn hư hỏng..."
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Mô tả chi tiết</label>
-                        <textarea
-                            rows={3} value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
-                            placeholder="Chi tiết về hỏng hóc..."
-                        />
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh hiện trạng</label>
-                        <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={(e) => setFiles(Array.from(e.target.files || []))}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                        />
-                        <p className="mt-1 text-xs text-gray-400">Có thể chọn tối đa 5 ảnh minh chứng.</p>
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                        <button type="button" onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-gray-600 hover:bg-gray-50 font-medium">
-                            Hủy
-                        </button>
-                        <button type="submit" disabled={saving} className="flex-1 px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary/90 font-medium disabled:opacity-50">
-                            {saving ? "Đang gửi..." : "Tạo yêu cầu"}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-};
-
 const SubCourtsManagementModal = ({ court, onClose, onSave, service }) => {
+    const courtId = court?._id;
     const [subCourts, setSubCourts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [newName, setNewName] = useState("");
@@ -716,10 +523,10 @@ const SubCourtsManagementModal = ({ court, onClose, onSave, service }) => {
     const [editingName, setEditingName] = useState("");
     const [updatingId, setUpdatingId] = useState(null);
 
-    const fetchSubCourts = async () => {
+    const fetchSubCourts = useCallback(async () => {
         try {
             setLoading(true);
-            const res = await service.getSubCourts(court._id);
+            const res = await service.getSubCourts(courtId);
             setSubCourts(res.subCourts || []);
         } catch (err) {
             console.error("Lỗi khi tải danh sách sân nhỏ:", err);
@@ -727,13 +534,13 @@ const SubCourtsManagementModal = ({ court, onClose, onSave, service }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [courtId, service]);
 
     useEffect(() => {
-        if (court?._id) {
-            fetchSubCourts();
-        }
-    }, [court?._id]);
+        if (!courtId) return;
+        const timer = setTimeout(fetchSubCourts, 0);
+        return () => clearTimeout(timer);
+    }, [courtId, fetchSubCourts]);
 
     const handleAdd = async (e) => {
         e.preventDefault();

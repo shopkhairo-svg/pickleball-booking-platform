@@ -27,6 +27,7 @@ const adminService = {
     getBookings: (params) => axiosClient.get("/admin/bookings", { params }),
     confirmBooking: (id) => axiosClient.put(`/admin/bookings/${id}/confirm`),
     recordCashPayment: (id) => axiosClient.put(`/admin/bookings/${id}/cash-payment`),
+    recordRefund: (id) => axiosClient.put(`/admin/bookings/${id}/refund`),
     completeBooking: (id) => axiosClient.put(`/admin/bookings/${id}/complete`),
     cancelBooking: (id, cancelReason) =>
         axiosClient.put(`/admin/bookings/${id}/cancel`, { cancelReason }),

@@ -9,36 +9,71 @@ export default function NotificationBell() {
     const [unreadCount, setUnreadCount] = useState(0);
     const [toast, setToast] = useState(null);
 
-    const fetchNotifications = async () => {
-        if (!isAuthenticated) return;
-        const res = await notificationService.getNotifications();
-        if (res.success) {
-            setNotifications(res.notifications || []);
-            setUnreadCount(res.unreadCount || 0);
-        }
-    };
-
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        fetchNotifications().catch(() => {});
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated]);
+        if (!isAuthenticated) return undefined;
 
-    useEffect(() => {
-        if (!isAuthenticated || !accessToken) return undefined;
+        const baseUrl = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+        let stopped = false;
+        let source;
+        let reconnectTimer;
+        let toastTimer;
+        let failures = 0;
 
-        const baseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
-        const source = new EventSource(`${baseUrl}/notifications/stream?token=${encodeURIComponent(accessToken)}`);
+        const refreshNotifications = async () => {
+            // Uses the shared Axios interceptor, including its single concurrent refresh.
+            const result = await notificationService.getNotifications();
+            if (stopped || !result.success) return;
+            setNotifications(result.notifications || []);
+            setUnreadCount(result.unreadCount || 0);
+        };
 
-        source.addEventListener("notification", (event) => {
-            const notification = JSON.parse(event.data);
-            setNotifications(prev => [notification, ...prev].slice(0, 20));
-            setUnreadCount(prev => prev + 1);
-            setToast(notification);
-            setTimeout(() => setToast(null), 4000);
+        const reconnect = () => {
+            if (stopped) return;
+            const delay = Math.min(1000 * 2 ** Math.min(failures++, 5), 30000);
+            reconnectTimer = setTimeout(async () => {
+                try {
+                    await refreshNotifications();
+                    // A refreshed token triggers this effect again with the new session.
+                    if (!stopped && useAuthStore.getState().accessToken === accessToken) connect();
+                } catch (error) {
+                    if ([401, 403].includes(error.response?.status)) return;
+                    reconnect();
+                }
+            }, delay);
+        };
+
+        const connect = () => {
+            if (stopped || !accessToken) return;
+            source = new EventSource(`${baseUrl}/notifications/stream?token=${encodeURIComponent(accessToken)}`);
+            source.addEventListener("ready", () => { failures = 0; });
+            source.addEventListener("notification", event => {
+                if (stopped) return;
+                let notification;
+                try { notification = JSON.parse(event.data); } catch { return; }
+                if (!notification?._id) return;
+                setNotifications(prev => [notification, ...prev.filter(item => item._id !== notification._id)].slice(0, 20));
+                setUnreadCount(prev => prev + 1);
+                setToast(notification);
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => { if (!stopped) setToast(null); }, 4000);
+            });
+            source.onerror = () => {
+                // EventSource retries with the same stale URL unless explicitly replaced.
+                source.close();
+                reconnect();
+            };
+        };
+
+        void refreshNotifications().catch(error => {
+            if (!accessToken && ![401, 403].includes(error.response?.status)) reconnect();
         });
-
-        return () => source.close();
+        connect();
+        return () => {
+            stopped = true;
+            source?.close();
+            clearTimeout(reconnectTimer);
+            clearTimeout(toastTimer);
+        };
     }, [isAuthenticated, accessToken]);
 
     if (!isAuthenticated) return null;

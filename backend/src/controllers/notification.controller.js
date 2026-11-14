@@ -11,7 +11,7 @@ class NotificationController {
             const result = await notificationService.getNotifications(req.user, req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -20,7 +20,7 @@ class NotificationController {
             const notification = await notificationService.markRead(req.user, req.params.id);
             return res.status(200).json({ success: true, notification });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -29,7 +29,7 @@ class NotificationController {
             const result = await notificationService.markAllRead(req.user);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -38,7 +38,7 @@ class NotificationController {
             const result = await notificationService.deleteNotification(req.user, req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 }

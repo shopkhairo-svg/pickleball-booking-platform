@@ -1,12 +1,34 @@
 import Notification from "../models/notification.model.js";
 import User from "../models/user.model.js";
 import mailUtil from "../utils/mail.util.js";
+import mongoose from "mongoose";
 
 const clients = new Map();
 
 const writeEvent = (res, notification) => {
     res.write(`event: notification\n`);
     res.write(`data: ${JSON.stringify(notification)}\n\n`);
+};
+
+const notificationIdOrThrow = id => {
+    if (!mongoose.isObjectIdOrHexString(id)) {
+        throw Object.assign(new Error("Mã thông báo không hợp lệ!"), { status: 400 });
+    }
+};
+
+const emit = (key, notification) => {
+    const bucket = clients.get(key);
+    if (!bucket) return;
+    for (const res of bucket) {
+        try {
+            if (res.destroyed || res.writableEnded) bucket.delete(res);
+            else writeEvent(res, notification);
+        } catch {
+            bucket.delete(res);
+            res.destroy?.();
+        }
+    }
+    if (!bucket.size) clients.delete(key);
 };
 
 class NotificationService {
@@ -25,25 +47,41 @@ class NotificationService {
         res.write(`event: ready\n`);
         res.write(`data: ${JSON.stringify({ ok: true })}\n\n`);
 
-        return () => {
+        const unregister = () => {
+            clearInterval(heartbeat);
+            clearTimeout(expiration);
             const bucket = clients.get(key);
             if (bucket) {
                 bucket.delete(res);
                 if (bucket.size === 0) clients.delete(key);
             }
         };
+        // Keep idle streams alive behind Nginx and close them when their JWT expires.
+        const heartbeat = setInterval(() => {
+            try {
+                if (res.destroyed || res.writableEnded) unregister();
+                else res.write(": keep-alive\n\n");
+            } catch {
+                unregister();
+                res.destroy?.();
+            }
+        }, 25000);
+        heartbeat.unref();
+        const expiration = user.exp ? setTimeout(() => {
+            unregister();
+            res.end();
+        }, Math.max(0, user.exp * 1000 - Date.now())) : undefined;
+        expiration?.unref();
+        res.once("close", unregister);
+        return unregister;
     }
 
     emitToUser(userId, notification) {
-        const bucket = clients.get(`user:${userId}`);
-        if (!bucket) return;
-        for (const res of bucket) writeEvent(res, notification);
+        emit(`user:${userId}`, notification);
     }
 
     emitToAdmin(userId, notification) {
-        const bucket = clients.get(`admin:${userId}`);
-        if (!bucket) return;
-        for (const res of bucket) writeEvent(res, notification);
+        emit(`admin:${userId}`, notification);
     }
 
     async createForUser({ userId, title, message, type = "SYSTEM", referenceId = null, referenceType = null, sendMail = false }) {
@@ -135,7 +173,13 @@ class NotificationService {
     }
 
     async getNotifications(user, query = {}) {
-        const limit = Math.min(parseInt(query.limit, 10) || 20, 100);
+        const limit = query.limit === undefined ? 20 : Number(query.limit);
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+            throw Object.assign(new Error("Số lượng thông báo phải là số nguyên từ 1 đến 100!"), { status: 400 });
+        }
+        if (query.isRead !== undefined && !["true", "false"].includes(query.isRead)) {
+            throw Object.assign(new Error("Bộ lọc đã đọc phải là true hoặc false!"), { status: 400 });
+        }
         const filter = { userId: user.id };
         if (query.isRead !== undefined) filter.isRead = query.isRead === "true";
 
@@ -148,12 +192,13 @@ class NotificationService {
     }
 
     async markRead(user, notificationId) {
+        notificationIdOrThrow(notificationId);
         const notification = await Notification.findOneAndUpdate(
             { _id: notificationId, userId: user.id },
             { $set: { isRead: true } },
             { new: true }
         );
-        if (!notification) throw new Error("Không tìm thấy thông báo!");
+        if (!notification) throw Object.assign(new Error("Không tìm thấy thông báo!"), { status: 404 });
         return notification;
     }
 
@@ -163,8 +208,9 @@ class NotificationService {
     }
 
     async deleteNotification(user, notificationId) {
+        notificationIdOrThrow(notificationId);
         const deleted = await Notification.findOneAndDelete({ _id: notificationId, userId: user.id });
-        if (!deleted) throw new Error("Không tìm thấy thông báo!");
+        if (!deleted) throw Object.assign(new Error("Không tìm thấy thông báo!"), { status: 404 });
         return { message: "Đã xóa thông báo!" };
     }
 }

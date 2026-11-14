@@ -18,7 +18,11 @@ import shipperRoutes from "./routes/shipper.routes.js";
 import maintenanceStaffRoutes from "./routes/maintenanceStaff.routes.js";
 
 import { developmentGate } from "./middlewares/development.middleware.js";
+import swaggerJsdoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
 import { startBookingReminders } from "./services/bookingReminder.service.js";
+import Booking from "./models/booking.model.js";
+import CourtSlot from "./models/courtSlot.model.js";
 
 const app = express();
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
@@ -44,10 +48,31 @@ app.use(cors({
     credentials: true // Cho phép gửi cookie (cần cho httpOnly refreshToken sau này)
 }));
 app.use(express.json());
+
+// ---------- Swagger setup ----------
+const swaggerDefinition = {
+  openapi: "3.0.0",
+  info: {
+    title: "Pickleball Booking System API",
+    version: "1.0.0",
+    description: "Auto‑generated API documentation using swagger-jsdoc",
+  },
+  servers: [{ url: "/api" }],
+};
+const swaggerOptions = {
+  swaggerDefinition,
+  // Look for JSDoc comments in all route files
+  apis: ["./src/routes/*.js"],
+};
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// -----------------------------------
 app.use("/api", developmentGate);
 
 // 1. Kết nối DB (Bắt buộc dùng await để đảm bảo DB sẵn sàng trước khi mở cổng)
 await connectDB(); //
+// Reservation correctness relies on unique request/slot indexes before accepting traffic.
+await Promise.all([Booking.init(), CourtSlot.init()]);
 
 import systemSettingService from "./services/systemSetting.service.js";
 await systemSettingService.initializeSettings();
@@ -57,12 +82,13 @@ import { startSlotScheduler } from "./utils/slotScheduler.js";
 startSlotScheduler();
 startBookingReminders();
 
-// Tự động quét và hoàn tất các booking đã qua giờ chơi + cập nhật trả thiết bị định kỳ
+// Phục hồi giữ chỗ bị gián đoạn và hoàn tất các lượt đã thu tiền sau giờ chơi.
 import bookingService from "./services/booking.service.js";
-bookingService.autoCompletePastBookings(); // Quét ngay khi khởi động
-setInterval(() => {
-    bookingService.autoCompletePastBookings();
-}, 5 * 60 * 1000); // Quét định kỳ mỗi 5 phút
+const runBookingCleanup = () => bookingService.autoCompletePastBookings().catch(error => {
+    console.error("Booking cleanup failed:", error.message);
+});
+runBookingCleanup();
+setInterval(runBookingCleanup, 60 * 1000);
 
 // 2. Cấu hình các tuyến đường API
 app.use("/api/auth", authRoutes);

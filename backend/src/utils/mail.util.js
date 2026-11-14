@@ -2,6 +2,10 @@
 import nodemailer from "nodemailer";
 import { getSmtpOptions } from "../config/authConfig.js";
 
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+})[character]);
+
 class MailUtils {
     async sendBookingReminder(booking) {
         return this.transporter.sendMail({
@@ -34,12 +38,12 @@ class MailUtils {
                         <h1 style="color: #006e2f; margin: 0; font-size: 24px; font-weight: 900;">PickleballPro</h1>
                     </div>
                     <div style="background-color: #ffffff; padding: 24px; border-radius: 16px;">
-                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${fullName}</b>,</p>
+                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${escapeHtml(fullName)}</b>,</p>
                         <p style="font-size: 14px; color: #3d4a3d; line-height: 1.5;">
                             Hệ thống đã nhận được yêu cầu thiết lập lại mật khẩu cho tài khoản của bạn. Vui lòng bấm vào nút hành động bên dưới để tiến hành đổi mật khẩu mới:
                         </p>
                         <div style="text-align: center; margin: 25px 0;">
-                            <a href="${resetLink}" target="_blank" style="background-color: #006e2f; color: #ffffff; font-weight: bold; padding: 12px 30px; text-decoration: none; border-radius: 9999px; font-size: 14px; display: inline-block;">
+                            <a href="${escapeHtml(resetLink)}" target="_blank" style="background-color: #006e2f; color: #ffffff; font-weight: bold; padding: 12px 30px; text-decoration: none; border-radius: 9999px; font-size: 14px; display: inline-block;">
                                 Đặt lại mật khẩu
                             </a>
                         </div>
@@ -74,7 +78,7 @@ class MailUtils {
                         <h1 style="color: #006e2f; margin: 0; font-size: 24px; font-weight: 900;">PickleballPro</h1>
                     </div>
                     <div style="background-color: #ffffff; padding: 24px; border-radius: 16px;">
-                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${fullName}</b>,</p>
+                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${escapeHtml(fullName)}</b>,</p>
                         <p style="font-size: 14px; color: #3d4a3d; line-height: 1.5;">
                             Cảm ơn bạn đã đăng ký thành viên tại hệ thống <b>PickleballPro</b>. Để hoàn tất thủ tục xác minh Email chính chủ, vui lòng nhập mã OTP gồm 6 chữ số dưới đây vào giao diện ứng dụng:
                         </p>
@@ -116,7 +120,7 @@ class MailUtils {
                         <h1 style="color: #006e2f; margin: 0; font-size: 24px; font-weight: 900;">PickleballPro</h1>
                     </div>
                     <div style="background-color: #ffffff; padding: 24px; border-radius: 16px;">
-                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${fullName}</b>,</p>
+                        <p style="font-size: 16px; color: #161d16; margin-top: 0;">Xin chào <b>${escapeHtml(fullName)}</b>,</p>
                         <p style="font-size: 14px; color: #3d4a3d; line-height: 1.5;">
                             Chúng tôi nhận được yêu cầu khôi phục mật khẩu từ tài khoản của bạn. Để đặt lại mật khẩu mới, vui lòng nhập mã OTP gồm 6 chữ số dưới đây:
                         </p>
@@ -157,9 +161,9 @@ class MailUtils {
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 20px; background-color: #f3fcef;">
                     <div style="background-color: #ffffff; padding: 24px; border-radius: 16px; border: 1px solid #bccbb9;">
-                        <h2 style="color: #006e2f; margin-top: 0;">${title}</h2>
-                        <p style="font-size: 15px; color: #161d16;">Xin chào <b>${fullName || "bạn"}</b>,</p>
-                        <p style="font-size: 14px; color: #3d4a3d; line-height: 1.6;">${message}</p>
+                        <h2 style="color: #006e2f; margin-top: 0;">${escapeHtml(title)}</h2>
+                        <p style="font-size: 15px; color: #161d16;">Xin chào <b>${escapeHtml(fullName || "bạn")}</b>,</p>
+                        <p style="font-size: 14px; color: #3d4a3d; line-height: 1.6;">${escapeHtml(message)}</p>
                         <p style="font-size: 12px; color: #667066; margin-top: 24px;">Email này được gửi tự động từ hệ thống PickleballPro.</p>
                     </div>
                 </div>

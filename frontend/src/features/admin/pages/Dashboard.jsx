@@ -82,7 +82,7 @@ export default function Dashboard() {
         <div className="space-y-8">
             <div>
                 <h1 className="admin-page-title">Dashboard tổng quan</h1>
-                <p className="admin-page-subtitle">Theo dõi doanh thu, booking, dòng tiền và hiệu suất sân.</p>
+                <p className="admin-page-subtitle">Theo dõi doanh thu, lịch đặt và hiệu suất sân.</p>
             </div>
 
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

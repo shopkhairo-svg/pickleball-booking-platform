@@ -133,14 +133,14 @@ export default function Home() {
                 <div className="app-shell grid gap-10 py-16 md:grid-cols-[0.85fr_1.15fr] lg:py-20">
                     <div>
                         <h2 className="section-heading max-w-xl">Một luồng đặt sân đủ rõ cho cả người chơi lẫn vận hành.</h2>
-                        <p className="muted-copy mt-4 max-w-md font-medium">Thiết kế lại quanh các quyết định thật: chọn sân, chọn giờ, thêm dụng cụ, thanh toán và quay lại đánh giá.</p>
+                        <p className="muted-copy mt-4 max-w-md font-medium">Chọn sân, chọn giờ, chờ xác nhận và thanh toán tại sân. Sau buổi chơi, bạn có thể gửi đánh giá trải nghiệm.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         {[
                             ["calendar_month", "Lịch sân trực quan", "Ma trận giờ giúp người chơi thấy ngay slot trống và slot đã kín.", "bg-emerald-50/20 border-emerald-500/10"],
-                            ["payments", "Chi phí minh bạch", "Tách tiền sân, thiết bị, phí hệ thống, coupon và điểm dùng trong checkout.", "bg-white"],
+                            ["payments", "Chi phí minh bạch", "Xem tiền sân và phí hệ thống trước khi đặt. Thanh toán trực tiếp tại sân.", "bg-white"],
                             ["verified", "Đánh giá xác thực", "Chỉ booking đã hoàn tất mới được đánh giá, hạn chế bình luận ảo.", "bg-white"],
-                            ["dashboard_customize", "Quản trị tinh gọn", "Dashboard, đơn hàng, thiết bị và coupon đồng bộ chung một ngôn ngữ thiết kế.", "bg-blue-50/10 border-blue-500/5"],
+                            ["dashboard_customize", "Quản lý lịch chơi", "Theo dõi đơn đặt sân, trạng thái xác nhận và lịch sử thanh toán ở cùng một nơi.", "bg-blue-50/10 border-blue-500/5"],
                         ].map(([icon, title, text, bg]) => (
                             <div key={title} className={`surface-panel-flat p-6 flex flex-col justify-between ${bg} border border-zinc-200/40`}>
                                 <div>

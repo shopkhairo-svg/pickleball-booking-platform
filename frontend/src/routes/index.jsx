@@ -1,4 +1,5 @@
 import UnderDevelopment from "../components/UnderDevelopment.jsx";
+import CourtVendorFeature from "../components/CourtVendorFeature.jsx";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import Login from "../features/auth/pages/Login";
 import Register from "../features/auth/pages/Register";
@@ -87,7 +88,7 @@ export const router = createBrowserRouter([
                         element: <Favorites />,
                     },
                     {
-                        path: "rewards",
+                        path: "rewards/*",
                         element: <UnderDevelopment />,
                     },
                 ],
@@ -115,11 +116,11 @@ export const router = createBrowserRouter([
                         element: <BookingManagement />,
                     },
                     {
-                        path: "equipments",
+                        path: "equipments/*",
                         element: <UnderDevelopment />,
                     },
                     {
-                        path: "maintenance",
+                        path: "maintenance/*",
                         element: <UnderDevelopment />,
                     },
                     {
@@ -127,7 +128,7 @@ export const router = createBrowserRouter([
                         element: <UserManagement />,
                     },
                     {
-                        path: "coupons",
+                        path: "coupons/*",
                         element: <UnderDevelopment />,
                     },
                     {
@@ -137,6 +138,10 @@ export const router = createBrowserRouter([
                     {
                         path: "settings",
                         element: <Settings />,
+                    },
+                    {
+                        path: "import-orders/*",
+                        element: <UnderDevelopment />,
                     },
                     {
                         path: "profile",
@@ -156,32 +161,36 @@ export const router = createBrowserRouter([
                 children: [
                     {
                         index: true,
-                        element: <VendorDashboard />,
+                        element: <CourtVendorFeature><VendorDashboard /></CourtVendorFeature>,
                     },
                     {
                         path: "courts",
-                        element: <VendorCourtManagement />,
+                        element: <CourtVendorFeature><VendorCourtManagement /></CourtVendorFeature>,
                     },
                     {
                         path: "bookings",
-                        element: <VendorBookingManagement />,
+                        element: <CourtVendorFeature><VendorBookingManagement /></CourtVendorFeature>,
                     },
                     {
-                        path: "equipments",
+                        path: "equipments/*",
                         element: <UnderDevelopment />,
                     },
                     {
                         path: "reviews",
-                        element: <VendorReviews />,
+                        element: <CourtVendorFeature><VendorReviews /></CourtVendorFeature>,
                     },
                     {
-                        path: "maintenance",
+                        path: "maintenance/*",
                         element: <UnderDevelopment />,
                     },
                     {
                         path: "profile",
                         element: <RoleProfile />,
                     },
+                    ...["import-orders", "shippers", "deliveries", "maintenance-staff"].map(path => ({
+                        path: `${path}/*`,
+                        element: <UnderDevelopment />,
+                    })),
                 ],
             },
         ],
@@ -202,6 +211,7 @@ export const router = createBrowserRouter([
                         path: "profile",
                         element: <RoleProfile />,
                     },
+                    { path: "*", element: <UnderDevelopment /> },
                 ],
             },
         ],
@@ -221,6 +231,7 @@ export const router = createBrowserRouter([
                         path: "profile",
                         element: <RoleProfile />,
                     },
+                    { path: "*", element: <UnderDevelopment /> },
                 ],
             },
         ],

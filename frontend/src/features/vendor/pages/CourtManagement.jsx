@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { vendorService } from "@/services/vendor.service";
 
 const statusColors = {
@@ -12,6 +12,8 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
         name: court?.name || "",
         location: court?.location || "",
         address: court?.address || "",
+        latitude: court?.latitude ?? "",
+        longitude: court?.longitude ?? "",
         type: court?.type || "INDOOR",
         description: court?.description || "",
         pricePerHour: court?.pricePerHour || "",
@@ -85,6 +87,11 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
                         />
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <label>Vĩ độ (latitude)<input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={e => setForm({ ...form, latitude: e.target.value })} className="mt-1 w-full rounded-xl border p-3" /></label>
+                        <label>Kinh độ (longitude)<input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={e => setForm({ ...form, longitude: e.target.value })} className="mt-1 w-full rounded-xl border p-3" /></label>
+                    </div>
+                    <p className="text-sm text-gray-500">Nhập cả hai tọa độ để sân xuất hiện trong tìm kiếm gần đây, hoặc để trống cả hai.</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Loại sân *</label>
@@ -393,7 +400,7 @@ const SubCourtsManagementModal = ({ court, onClose, onSave, service }) => {
     const [editingName, setEditingName] = useState("");
     const [updatingId, setUpdatingId] = useState(null);
 
-    const fetchSubCourts = async () => {
+    const fetchSubCourts = useCallback(async () => {
         try {
             setLoading(true);
             const res = await service.getSubCourts(court._id);
@@ -404,13 +411,14 @@ const SubCourtsManagementModal = ({ court, onClose, onSave, service }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [court._id, service]);
 
     useEffect(() => {
         if (court?._id) {
-            fetchSubCourts();
+            const timer = setTimeout(fetchSubCourts, 0);
+            return () => clearTimeout(timer);
         }
-    }, [court?._id]);
+    }, [court?._id, fetchSubCourts]);
 
     const handleAdd = async (e) => {
         e.preventDefault();

@@ -18,7 +18,7 @@ export default function ShipperLayout() {
     const menuItems = [
         {
             path: "/shipper",
-            label: "Dashboard",
+            label: "Giao hàng · Đang phát triển",
             icon: "local_shipping",
         },
         {

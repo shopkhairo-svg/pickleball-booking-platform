@@ -6,7 +6,7 @@ class CourtRepository {
      */
     async findAndCount(filter, skip, limit) {
         // Luôn phòng thủ: Chỉ hiển thị các sân đang AVAILABLE (Sẵn sàng hoạt động)
-        const finalFilter = { status: "AVAILABLE", ...filter };
+        const finalFilter = { ...filter, status: "AVAILABLE" };
 
         // Kích hoạt truy vấn song song (Parallel Query) tối ưu tốc độ phản hồi
         const [courts, total] = await Promise.all([
@@ -34,6 +34,8 @@ class CourtRepository {
             { new: true }
         );
     }
+    async findWithCoordinates(filter, bounds = {}) {
+        return Court.find({ $and: [filter, bounds], status: "AVAILABLE", latitude: { $type: "number", $gte: -90, $lte: 90 }, longitude: { $type: "number", $gte: -180, $lte: 180 } }).lean();
+    }
 }
-
 export default new CourtRepository();

@@ -9,6 +9,11 @@ const bookingSchema = new mongoose.Schema({
     reminderAttempts: { type: Number, default: 0 },
     paidAt: Date,
     paymentRecordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    refundedAt: Date,
+    refundRecordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    reservationState: { type: String, enum: ["PREPARING", "COMMITTED", "FAILED"], default: "COMMITTED" },
+    reservationExpiresAt: Date,
+    requestKey: String,
 
     bookingCode: {
         type: String,
@@ -107,6 +112,7 @@ const bookingSchema = new mongoose.Schema({
         enum: [
             "UNPAID",
             "PAID",
+            "REFUND_PENDING",
             "REFUNDED"
         ],
         default: "UNPAID"
@@ -152,6 +158,8 @@ const bookingSchema = new mongoose.Schema({
 
 
 // INDEXES
+bookingSchema.index({ userId: 1, requestKey: 1 }, { unique: true, partialFilterExpression: { requestKey: { $type: "string" } } });
+bookingSchema.index({ reservationState: 1, reservationExpiresAt: 1 });
 bookingSchema.index({ status: 1, bookingDate: 1, reminderSentAt: 1 });
 bookingSchema.index({
     userId: 1

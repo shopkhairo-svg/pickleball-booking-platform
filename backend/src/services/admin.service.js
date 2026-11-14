@@ -1,3 +1,9 @@
+import { cancelCoreBooking, confirmCoreBooking, completeCoreBooking, recordCoreRefund } from "./bookingLifecycle.service.js";
+import mongoose from "mongoose";
+import { courtDate, queryNumber } from "../utils/courtQuery.js";
+import { searchPattern } from "../utils/courtFilters.js";
+import { parseCourtInput, courtText, courtStatus, scheduleChanged, assertCourtCanClose, assertScheduleAllowsBookings } from "../utils/courtInput.js";
+import { buildCourtFilters } from "../utils/courtFilters.js";
 // src/services/admin.service.js
 import adminRepository from "../repositories/admin.repository.js";
 import Court from "../models/court.model.js";
@@ -16,7 +22,7 @@ import uploadService from "./upload.service.js";
 import systemSettingService from "./systemSetting.service.js";
 import ImportOrder from "../models/importOrder.model.js";
 import Delivery from "../models/delivery.model.js";
-import { generateSlotsForNewSubCourt } from "../utils/slotScheduler.js";
+import { generateSlotsForNewSubCourt, regenerateSlotsForCourt } from "../utils/slotScheduler.js";
 import bookingService from "./booking.service.js";
 
 
@@ -27,29 +33,8 @@ class AdminService {
      * Lấy danh sách tất cả sân (Admin thấy cả HIDDEN/MAINTENANCE)
      */
     async getAllCourts(queryParams) {
-        const { type, location, status, search, limit = 10, page = 1 } = queryParams;
-
-        const parsedLimit = parseInt(limit);
-        const parsedPage = parseInt(page);
-        const skip = (parsedPage - 1) * parsedLimit;
-
-        const filter = {};
-
-        if (type && ["INDOOR", "OUTDOOR"].includes(type.toUpperCase())) {
-            filter.type = type.toUpperCase();
-        }
-        if (location) {
-            filter.location = { $regex: location, $options: "i" };
-        }
-        if (status && ["AVAILABLE", "MAINTENANCE", "HIDDEN"].includes(status.toUpperCase())) {
-            filter.status = status.toUpperCase();
-        }
-        if (search) {
-            filter.$or = [
-                { name: { $regex: search, $options: "i" } },
-                { location: { $regex: search, $options: "i" } }
-            ];
-        }
+        const { filter, limit: parsedLimit, page: parsedPage, skip } = buildCourtFilters({ ...queryParams, limit: queryParams.limit ?? 10 });
+        if (queryParams.status !== undefined && queryParams.status !== "") filter.status = courtStatus(queryParams.status);
 
         const { courts, total } = await adminRepository.findAllCourts(filter, skip, parsedLimit);
 
@@ -90,41 +75,10 @@ class AdminService {
      * Tạo sân mới (Kèm upload hình ảnh Cloudinary)
      */
     async createCourt(courtData, files) {
-        const { name, location, address, type, description, pricePerHour, openTime, closeTime, slotDuration, amenities } = courtData;
-
-        if (!name || !location || !type || !pricePerHour) {
-            throw new Error("Vui lòng điền đầy đủ thông tin bắt buộc: Tên sân, Khu vực, Loại sân, Giá!");
-        }
-
-        // Xử lý mảng hình ảnh từ Multer Cloudinary
-        const images = files && files.length > 0
-            ? files.map(file => ({ imageUrl: file.path, publicId: file.filename }))
-            : [];
-
-        // Xử lý amenities (tiện ích) - frontend gửi dạng chuỗi ngăn cách bởi dấu phẩy
-        const parsedAmenities = amenities
-            ? (typeof amenities === "string" ? amenities.split(",").map(a => a.trim()) : amenities)
-            : [];
-
-        const newCourt = await adminRepository.createCourt({
-            name: name.trim(),
-            location: location.trim(),
-            address: address?.trim() || "",
-            type: type.toUpperCase(),
-            description: description?.trim() || "",
-            pricePerHour: parseInt(pricePerHour),
-            openTime: openTime || "06:00",
-            closeTime: closeTime || "22:00",
-            slotDuration: parseInt(slotDuration) || 60,
-            amenities: parsedAmenities,
-            images,
-            status: "AVAILABLE"
-        });
-
-        return {
-            message: "Tạo cụm sân mới thành công!",
-            court: newCourt
-        };
+        const input = parseCourtInput(courtData);
+        const images = files?.map(file => ({ imageUrl: file.path, publicId: file.filename })) || [];
+        const newCourt = await adminRepository.createCourt({ ...input, images, status: "AVAILABLE" });
+        return { message: "Tạo cụm sân mới thành công!", court: newCourt };
     }
 
     /**
@@ -133,38 +87,17 @@ class AdminService {
     async updateCourt(courtId, courtData, files) {
         const court = await adminRepository.findCourtById(courtId);
         if (!court) throw new Error("Cụm sân không tồn tại!");
-
-        const updateData = {};
-
-        if (courtData.name) updateData.name = courtData.name.trim();
-        if (courtData.location) updateData.location = courtData.location.trim();
-        if (courtData.address !== undefined) updateData.address = courtData.address.trim();
-        if (courtData.type) updateData.type = courtData.type.toUpperCase();
-        if (courtData.description !== undefined) updateData.description = courtData.description.trim();
-        if (courtData.pricePerHour) updateData.pricePerHour = parseInt(courtData.pricePerHour);
-        if (courtData.openTime) updateData.openTime = courtData.openTime;
-        if (courtData.closeTime) updateData.closeTime = courtData.closeTime;
-        if (courtData.slotDuration) updateData.slotDuration = parseInt(courtData.slotDuration);
-        if (courtData.status) updateData.status = courtData.status.toUpperCase();
-
-        if (courtData.amenities) {
-            updateData.amenities = typeof courtData.amenities === "string"
-                ? courtData.amenities.split(",").map(a => a.trim())
-                : courtData.amenities;
-        }
-
-        // Nếu có upload ảnh mới, nối thêm vào mảng images hiện tại
-        if (files && files.length > 0) {
-            const newImages = files.map(file => ({ imageUrl: file.path, publicId: file.filename }));
-            updateData.images = [...court.images, ...newImages];
-        }
-
+        const updateData = parseCourtInput(courtData, court);
+        if (updateData.status && updateData.status !== "AVAILABLE" && updateData.status !== court.status) await assertCourtCanClose({ courtId });
+        await assertScheduleAllowsBookings(courtId, updateData, court);
+        if (files?.length) updateData.images = [...court.images, ...files.map(file => ({ imageUrl: file.path, publicId: file.filename }))];
         const updatedCourt = await adminRepository.updateCourt(courtId, updateData);
-
-        return {
-            message: "Cập nhật thông tin cụm sân thành công!",
-            court: updatedCourt
-        };
+        let slotsPending = false;
+        if (updatedCourt.status === "AVAILABLE" && (scheduleChanged(updateData, court) || court.status !== "AVAILABLE")) {
+            try { await regenerateSlotsForCourt(courtId); }
+            catch (error) { slotsPending = true; console.error("[Slots] Reconciliation pending", String(courtId), error.message); }
+        }
+        return { message: slotsPending ? "Đã lưu thông tin sân; lịch giờ sẽ được đồng bộ lại tự động." : "Cập nhật thông tin cụm sân thành công!", court: updatedCourt, slotsPending };
     }
 
     /**
@@ -174,6 +107,7 @@ class AdminService {
         const court = await adminRepository.findCourtById(courtId);
         if (!court) throw new Error("Cụm sân không tồn tại!");
 
+        await assertCourtCanClose({ courtId });
         const deletedCourt = await adminRepository.softDeleteCourt(courtId);
         return {
             message: "Đã ẩn cụm sân khỏi hệ thống thành công!",
@@ -189,6 +123,7 @@ class AdminService {
         if (!court) throw new Error("Cụm sân không tồn tại!");
 
         const newStatus = court.status === "AVAILABLE" ? "MAINTENANCE" : "AVAILABLE";
+        if (newStatus !== "AVAILABLE") await assertCourtCanClose({ courtId });
         const updatedCourt = await adminRepository.updateCourt(courtId, { status: newStatus });
 
         if (newStatus === "AVAILABLE") {
@@ -211,25 +146,27 @@ class AdminService {
      * Lấy danh sách tất cả booking (Admin view)
      */
     async getAllBookings(queryParams) {
-        await bookingService.autoCompletePastBookings();
         const { status, courtId, startDate, endDate, search, limit = 10, page = 1 } = queryParams;
 
-        const parsedLimit = parseInt(limit);
-        const parsedPage = parseInt(page);
+        const parsedLimit = queryNumber(limit, { min: 1, max: 100, integer: true });
+        const parsedPage = queryNumber(page, { min: 1, max: 10000, integer: true });
         const skip = (parsedPage - 1) * parsedLimit;
 
-        const filter = {};
+        const filter = { reservationState: { $nin: ["PREPARING", "FAILED"] } };
 
         if (status && ["PENDING", "CONFIRMED", "CANCELLED", "COMPLETED"].includes(status.toUpperCase())) {
             filter.status = status.toUpperCase();
         }
         if (courtId) {
+            if (!mongoose.isValidObjectId(courtId)) throw new Error("Mã sân không hợp lệ.");
             filter.courtId = courtId;
         }
+        if (search) filter.bookingCode = { $regex: searchPattern(search), $options: "i" };
         if (startDate || endDate) {
             filter.bookingDate = {};
-            if (startDate) filter.bookingDate.$gte = startDate;
-            if (endDate) filter.bookingDate.$lte = endDate;
+            if (startDate) filter.bookingDate.$gte = courtDate(startDate);
+            if (endDate) filter.bookingDate.$lte = courtDate(endDate);
+            if (startDate && endDate && startDate > endDate) throw new Error("Khoảng ngày không hợp lệ.");
         }
 
         const { bookings, total } = await adminRepository.findAllBookings(filter, skip, parsedLimit);
@@ -271,141 +208,17 @@ class AdminService {
     /**
      * Admin xác nhận booking (PENDING → CONFIRMED)
      */
-    async confirmBooking(bookingId) {
-        const candidate = await Booking.findById(bookingId);
-        if (!candidate || new Date(`${candidate.bookingDate}T${candidate.startTime}:00+07:00`) <= new Date()) throw new Error("Đơn không tồn tại hoặc giờ chơi đã bắt đầu.");
-        const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "PENDING" }, { $set: { status: "CONFIRMED" } }, { new: true });
-        if (!booking) throw new Error("Chỉ được xác nhận đơn đang chờ duyệt.");
-        await notificationService.createForUser({ userId: booking.userId, title: "Lịch đặt sân đã được xác nhận", message: `Đơn ${booking.bookingCode}: ${booking.startTime} ngày ${booking.bookingDate}. Thanh toán tại sân.`, type: "BOOKING", referenceId: booking._id, referenceType: "Booking" }).catch(error => console.error("[Booking] Notification:", error.message));
-
-        return {
-            message: "Xác nhận đơn đặt sân thành công!",
-            booking
-        };
-    }
+    async confirmBooking(bookingId) { return confirmCoreBooking(bookingId); }
+    async completeBooking(bookingId) { return completeCoreBooking(bookingId); }
+    async cancelBooking(bookingId, cancelReason) { return cancelCoreBooking(bookingId, { admin: true, reason: cancelReason }); }
+    async recordRefund(bookingId, adminId) { return recordCoreRefund(bookingId, adminId); }
 
     async recordCashPayment(bookingId, adminId) {
-        const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "UNPAID" }, {
+        const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "CONFIRMED", paymentMethod: "CASH", paymentStatus: "UNPAID", reservationState: { $nin: ["PREPARING", "FAILED"] } }, {
             $set: { paymentStatus: "PAID", paidAt: new Date(), paymentRecordedBy: adminId }
-        }, { new: true });
-        if (!booking) throw new Error("Chỉ ghi nhận tiền mặt cho đơn đã xác nhận và chưa thanh toán.");
-        // CASH is collected at the court; it must not increase a fictitious online escrow wallet.
+        }, { returnDocument: "after" });
+        if (!booking) throw Object.assign(new Error("Chỉ ghi nhận tiền mặt cho đơn đã xác nhận và chưa thanh toán."), { status: 409 });
         return { message: "Đã ghi nhận thu tiền tại sân.", booking };
-    }
-
-    async completeBooking(bookingId) {
-        const booking = await adminRepository.findBookingById(bookingId);
-        if (!booking) throw new Error("Đơn đặt sân không tồn tại!");
-
-        if (booking.paymentStatus !== "PAID") {
-            throw new Error("Chỉ có thể hoàn tất đơn đã thanh toán!");
-        }
-        if (booking.status !== "CONFIRMED") {
-            throw new Error(`Chỉ có thể hoàn tất đơn CONFIRMED! Hiện tại: ${booking.status}`);
-        }
-
-        // Kiểm tra giờ kết thúc đã qua chưa (theo múi giờ Việt Nam)
-        const nowVN = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
-        const bookingEndStr = `${booking.bookingDate} ${booking.endTime}:00`;
-        if (bookingEndStr > nowVN) {
-            throw new Error(`Chưa thể hoàn tất đơn này! Lượt chơi kết thúc lúc ${booking.endTime} ngày ${booking.bookingDate}, hãy đợi hết giờ.`);
-        }
-
-        const completed = await Booking.findOneAndUpdate({ _id: booking._id, status: "CONFIRMED", paymentStatus: "PAID" }, { $set: { status: "COMPLETED" } });
-        if (!completed) throw new Error("Đơn đã thay đổi. Vui lòng tải lại.");
-        booking.status = "COMPLETED";
-
-        await revenueService.releaseBookingRevenue(booking);
-
-        await notificationService.createForUser({
-            userId: booking.userId._id || booking.userId,
-            title: "Lượt chơi đã hoàn tất",
-            message: `Đơn ${booking.bookingCode} đã hoàn tất. Bạn có thể đánh giá sân để chia sẻ trải nghiệm.`,
-            type: "BOOKING",
-            referenceId: booking._id,
-            referenceType: "Booking"
-        });
-
-        return {
-            message: "Hoàn tất đơn đặt sân và ghi nhận doanh thu khả dụng thành công!",
-            booking
-        };
-    }
-
-    /**
-     * Admin hủy booking + Rollback slot + Rollback thiết bị
-     */
-    async cancelBooking(bookingId, cancelReason) {
-        const booking = await adminRepository.findBookingById(bookingId);
-        if (!booking) throw new Error("Đơn đặt sân không tồn tại!");
-
-        if (["CANCELLED", "COMPLETED"].includes(booking.status)) {
-            throw new Error(`Đơn này đã ở trạng thái "${booking.status}", không thể hủy!`);
-        }
-
-        const cancelled = await Booking.findOneAndUpdate({ _id: booking._id, status: booking.status, paymentStatus: booking.paymentStatus },
-            { $set: { status: "CANCELLED", cancelReason: cancelReason || "Cancelled" } }, { new: true });
-        if (!cancelled) throw new Error("Booking changed; reload before cancelling.");
-
-        // 1. Nhả slot giờ
-        await CourtSlot.findOneAndUpdate(
-            { bookingId: booking._id, ...(booking.slotId ? { _id: booking.slotId } : {}) },
-            { $set: { isBooked: false, bookingId: null } }
-        );
-
-        // 2. Hoàn trả thiết bị nếu có
-        if (booking.equipmentPrice > 0) {
-            const rentedItems = await BookingEquipment.find({ bookingId: booking._id });
-            for (const item of rentedItems) {
-                item.returnStatus = "RETURNED";
-                await item.save();
-            }
-        }
-
-        // 3. Cập nhật trạng thái booking
-        booking.status = "CANCELLED";
-        booking.cancelReason = cancelReason || "Admin hủy đơn đặt sân.";
-
-        // 4. Hoàn tiền nếu đã thanh toán
-        const wasPaid = booking.paymentStatus === "PAID";
-        if (wasPaid) {
-            booking.paymentStatus = "REFUNDED";
-        }
-        await booking.save();
-
-        // 5. Hoàn điểm nếu có dùng điểm
-        if (booking.pointsUsed > 0) {
-            await pointsService.refund(booking.userId._id || booking.userId, booking.pointsUsed, {
-                referenceId: booking._id,
-                referenceType: "Booking",
-                description: "Hoàn điểm do admin hủy booking"
-            });
-        }
-
-        await revenueService.refundBookingRevenue(booking);
-
-        // 6. Thông báo với lý do đầy đủ + hoàn tiền
-        const refundNote = wasPaid
-            ? ` Số tiền ${booking.totalPrice.toLocaleString("vi-VN")}đ sẽ được hoàn lại trong vòng 24 giờ.`
-            : "";
-        const pointNote = booking.pointsUsed > 0
-            ? ` ${booking.pointsUsed} điểm tích lũy đã được hoàn lại vào ví.`
-            : "";
-
-        await notificationService.createForUser({
-            userId: booking.userId._id || booking.userId,
-            title: "Đơn đặt sân đã bị hủy",
-            message: `Đơn ${booking.bookingCode} đã bị hủy. Lý do: ${booking.cancelReason}.${refundNote}${pointNote}`,
-            type: "BOOKING",
-            referenceId: booking._id,
-            referenceType: "Booking"
-        });
-
-        return {
-            message: "Admin đã hủy đơn đặt sân thành công!",
-            booking,
-            refunded: wasPaid
-        };
     }
 
     // ======================== EQUIPMENT ========================
@@ -569,13 +382,12 @@ class AdminService {
      * Tổng quan Dashboard
      */
     async getDashboardStats() {
-        const [counts, revenue, occupancy, statusStats, newReviewCount, cashFlow, topCourtsByBooking] = await Promise.all([
+        const [counts, revenue, occupancy, statusStats, newReviewCount, topCourtsByBooking] = await Promise.all([
             adminRepository.getDashboardCounts(),
             adminRepository.getTotalRevenue(),
             adminRepository.getCourtOccupancyRate(),
             adminRepository.getBookingStatusStats(),
             Review.countDocuments({ createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } }),
-            revenueService.getCashFlowStats(),
             adminRepository.getTopCourtsByBooking()
         ]);
 
@@ -585,7 +397,6 @@ class AdminService {
             ...occupancy,
             newReviewCount,
             bookingStatusBreakdown: statusStats,
-            cashFlow,
             topCourtsByBooking
         };
     }
@@ -652,13 +463,13 @@ class AdminService {
 
         const filter = {};
         if (role) {
-            const validRoles = ["USER", "ADMIN", "VENDOR", "SHIPPER", "MAINTENANCE_STAFF"];
+            const validRoles = ["USER", "ADMIN", "VENDOR"];
             const upperRole = role.toUpperCase();
             if (validRoles.includes(upperRole)) {
                 filter.role = upperRole;
             }
         }
-        if (vendorType && ["COURT", "EQUIPMENT"].includes(vendorType.toUpperCase())) {
+        if (vendorType && ["COURT"].includes(vendorType.toUpperCase())) {
             filter.vendorType = vendorType.toUpperCase();
         }
         if (status && ["ACTIVE", "BLOCKED"].includes(status.toUpperCase())) {
@@ -738,7 +549,8 @@ class AdminService {
         return await SubCourt.find({ courtId }).sort({ name: 1 });
     }
 
-    async createSubCourt(courtId, name) {
+    async createSubCourt(courtId, rawName) {
+        const name = courtText(rawName, "Tên sân nhỏ", { required: true });
         if (!courtId || !name) throw new Error("Vui lòng nhập đầy đủ thông tin!");
         const court = await Court.findById(courtId);
         if (!court) throw new Error("Cụm sân không tồn tại!");
@@ -764,7 +576,8 @@ class AdminService {
     }
 
     async updateSubCourt(subCourtId, data) {
-        const { name, status } = data;
+        const name = data.name === undefined ? undefined : courtText(data.name, "Tên sân nhỏ", { required: true });
+        const status = data.status === undefined ? undefined : courtStatus(data.status);
         const subCourt = await SubCourt.findById(subCourtId);
         if (!subCourt) throw new Error("Sân nhỏ không tồn tại!");
 
@@ -786,15 +599,7 @@ class AdminService {
             }
 
             if (["MAINTENANCE", "HIDDEN"].includes(upperStatus)) {
-                const todayStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).split(" ")[0];
-                const activeBookingsExist = await CourtSlot.exists({
-                    subCourtId,
-                    date: { $gte: todayStr },
-                    isBooked: true
-                });
-                if (activeBookingsExist) {
-                    throw new Error("Không thể thay đổi trạng thái sân nhỏ này vì đã có lịch đặt trong tương lai!");
-                }
+                await assertCourtCanClose({ subCourtId });
             }
             subCourt.status = upperStatus;
         }
@@ -812,14 +617,7 @@ class AdminService {
         if (!subCourt) throw new Error("Sân nhỏ không tồn tại!");
 
         const todayStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).split(" ")[0];
-        const activeBookingsExist = await CourtSlot.exists({
-            subCourtId,
-            date: { $gte: todayStr },
-            isBooked: true
-        });
-        if (activeBookingsExist) {
-            throw new Error("Không thể xóa sân nhỏ này vì đã có lịch đặt trong tương lai!");
-        }
+        await assertCourtCanClose({ subCourtId });
 
         subCourt.status = "HIDDEN";
         await subCourt.save();
@@ -1132,6 +930,8 @@ class AdminService {
     }
 
     async updateSettings(updates) {
+        if (!updates || typeof updates !== "object" || Array.isArray(updates)) throw new Error("Cấu hình không hợp lệ.");
+        for (const [key, value] of Object.entries(updates)) systemSettingService.validateSetting(key, value);
         for (const key of Object.keys(updates)) {
             await systemSettingService.updateSetting(key, updates[key]);
         }
@@ -1143,9 +943,9 @@ class AdminService {
         const user = await User.findById(userId);
         if (!user) throw new Error("Người dùng không tồn tại!");
 
-        if (!role) throw new Error("Thiếu thông tin vai trò (role)!");
+        if (typeof role !== "string" || !role) throw new Error("Thiếu thông tin vai trò (role)!");
 
-        const validRoles = ["USER", "ADMIN", "VENDOR", "SHIPPER", "MAINTENANCE_STAFF"];
+        const validRoles = ["USER", "ADMIN", "VENDOR"];
         const updatedRole = role.toUpperCase();
         if (!validRoles.includes(updatedRole)) {
             throw new Error(`Vai trò không hợp lệ: ${role}`);
@@ -1154,10 +954,10 @@ class AdminService {
         const updateData = { role: updatedRole };
 
         if (updatedRole === "VENDOR") {
-            if (vendorType && ["COURT", "EQUIPMENT"].includes(vendorType.toUpperCase())) {
+            if (typeof vendorType === "string" && vendorType.toUpperCase() === "COURT") {
                 updateData.vendorType = vendorType.toUpperCase();
             } else {
-                throw new Error("Nếu vai trò là VENDOR, loại vendorType phải là COURT hoặc EQUIPMENT!");
+                throw new Error("Chỉ hỗ trợ chủ sân với vendorType là COURT. Nhà cung cấp thiết bị đang phát triển.");
             }
         } else {
             updateData.vendorType = null;

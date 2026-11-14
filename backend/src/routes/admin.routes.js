@@ -3,9 +3,11 @@ import express from "express";
 import adminController from "../controllers/admin.controller.js";
 import { verifyToken, requireAdmin } from "../middlewares/auth.middleware.js";
 import { globalLimiter } from "../middlewares/rateLimiter.middleware.js";
-import { uploadCourtCloud, uploadMaintenanceCloud } from "../config/cloudinary.js";
+import { uploadCourtCloud } from "../config/cloudinary.js";
+import { inDevelopment } from "../middlewares/development.middleware.js";
 
 const router = express.Router();
+router.use(["/equipments", "/import-orders", "/maintenance", "/analytics/equipment-stats"], inDevelopment);
 
 // 🛡️ Tất cả route admin đều yêu cầu: đăng nhập + quyền ADMIN
 router.use(globalLimiter, verifyToken, requireAdmin);
@@ -28,31 +30,13 @@ router.delete("/courts/:id/images/:publicId", adminController.deleteCourtImage);
 router.get("/bookings", adminController.getAllBookings);
 router.put("/bookings/:id/confirm", adminController.confirmBooking);
 router.put("/bookings/:id/cash-payment", adminController.recordCashPayment);
+router.put("/bookings/:id/refund", adminController.recordRefund);
 router.put("/bookings/:id/complete", adminController.completeBooking);
 router.put("/bookings/:id/cancel", adminController.cancelBooking);
-
-// ======================== EQUIPMENT ========================
-router.get("/equipments", adminController.getAllEquipments);
-router.post("/equipments", uploadCourtCloud.single("image"), adminController.createEquipment);
-router.put("/equipments/:id", uploadCourtCloud.single("image"), adminController.updateEquipment);
-router.delete("/equipments/:id", adminController.deleteEquipment);
-router.put("/equipments/:id/stock-in", adminController.stockIn);
-router.get("/equipments/:id/rentals", adminController.getEquipmentRentals);
-
-// ======================== IMPORT ORDERS ========================
-router.post("/import-orders", adminController.createImportOrder);
-router.get("/import-orders", adminController.getImportOrders);
-router.put("/import-orders/:id/cancel", adminController.cancelImportOrder);
-
-// ======================== MAINTENANCE ========================
-router.get("/maintenance", adminController.getAllMaintenance);
-router.post("/maintenance", uploadMaintenanceCloud.array("images", 5), adminController.createMaintenance);
-router.put("/maintenance/:id/status", adminController.updateMaintenanceStatus);
 
 // ======================== ANALYTICS ========================
 router.get("/analytics/dashboard", adminController.getDashboardStats);
 router.get("/analytics/revenue", adminController.getRevenueStats);
-router.get("/analytics/equipment-stats", adminController.getEquipmentStats);
 router.get("/analytics/peak-hours", adminController.getPeakHours);
 
 // ======================== SETTINGS ========================

@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import adminService from "../../../services/adminService";
 
 export default function Settings() {
-    const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
@@ -15,27 +14,14 @@ export default function Settings() {
         contactPhone: "",
         address: ""
     });
-    const [otpEmailConfig, setOtpEmailConfig] = useState({
-        senderName: "PickleballPro Support",
-        expiresInMinutes: 5,
-        maxAttempts: 3
-    });
 
-    useEffect(() => {
-        fetchSettings();
-    }, []);
-
-    const fetchSettings = async () => {
+    const fetchSettings = useCallback(async () => {
         try {
             setLoading(true);
             const res = await adminService.getSettings();
             if (res.success && res.settings) {
-                setSettings(res.settings);
                 if (res.settings.websiteInfo) {
                     setWebsiteInfo(res.settings.websiteInfo);
-                }
-                if (res.settings.otpEmailConfig) {
-                    setOtpEmailConfig(res.settings.otpEmailConfig);
                 }
             }
         } catch (err) {
@@ -44,7 +30,12 @@ export default function Settings() {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        const timer = setTimeout(fetchSettings, 0);
+        return () => clearTimeout(timer);
+    }, [fetchSettings]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -53,8 +44,7 @@ export default function Settings() {
         setSuccessMsg("");
         try {
             const res = await adminService.updateSettings({
-                websiteInfo,
-                otpEmailConfig
+                websiteInfo
             });
             if (res.success) {
                 setSuccessMsg("Cấu hình hệ thống đã được lưu thành công!");
@@ -83,7 +73,7 @@ export default function Settings() {
         <div className="max-w-4xl mx-auto space-y-8 font-lexend">
             <div>
                 <h1 className="admin-page-title">Cấu hình Hệ thống</h1>
-                <p className="admin-page-subtitle">Quản lý các thông số chung của website, phí vận chuyển và cấu hình SMTP/OTP.</p>
+                <p className="admin-page-subtitle">Quản lý thông tin website và liên hệ hỗ trợ.</p>
             </div>
 
             {successMsg && (
@@ -151,48 +141,9 @@ export default function Settings() {
                     </div>
                 </div>
 
-                {/* 3. OTP & Security Config */}
-                <div className="admin-card p-6 space-y-4">
-                    <h3 className="text-base font-black text-gray-800 border-b pb-3 border-gray-100 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary">security</span>
-                        Cấu hình OTP & Xác thực Email
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-gray-600">Tên người gửi Email</label>
-                            <input
-                                type="text"
-                                value={otpEmailConfig.senderName}
-                                onChange={(e) => setOtpEmailConfig({ ...otpEmailConfig, senderName: e.target.value })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-gray-50/50"
-                                required
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-gray-600">Thời gian hết hạn OTP (phút)</label>
-                            <input
-                                type="number"
-                                value={otpEmailConfig.expiresInMinutes}
-                                onChange={(e) => setOtpEmailConfig({ ...otpEmailConfig, expiresInMinutes: Number(e.target.value) })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-gray-50/50"
-                                min={1}
-                                max={60}
-                                required
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-gray-600">Giới hạn gửi tối đa (lần / 15 phút)</label>
-                            <input
-                                type="number"
-                                value={otpEmailConfig.maxAttempts}
-                                onChange={(e) => setOtpEmailConfig({ ...otpEmailConfig, maxAttempts: Number(e.target.value) })}
-                                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-gray-50/50"
-                                min={1}
-                                max={10}
-                                required
-                            />
-                        </div>
-                    </div>
+                <div className="admin-card p-6 space-y-2">
+                    <h3 className="text-base font-bold text-gray-800">Thiết lập email và OTP · Đang phát triển</h3>
+                    <p className="text-sm text-gray-600">Gửi OTP và nhắc lịch đang dùng cấu hình của máy chủ. Việc chỉnh tên người gửi, thời hạn OTP và giới hạn gửi trên trang này sẽ được bổ sung sau; các mục này chưa thể thay đổi tại đây.</p>
                 </div>
 
                 {/* Save Button */}

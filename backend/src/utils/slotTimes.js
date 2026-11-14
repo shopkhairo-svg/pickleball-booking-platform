@@ -7,7 +7,7 @@ export function slotTimes(court) {
     const start = minutes(court.openTime ?? "06:00");
     const end = minutes(court.closeTime ?? "22:00");
     const duration = Number(court.slotDuration ?? 60);
-    if (!Number.isInteger(duration) || duration < 15 || duration > 720 || end <= start) throw new Error("Thời lượng slot hoặc giờ hoạt động không hợp lệ.");
+    if (!Number.isInteger(duration) || duration < 15 || duration > 720 || end <= start || duration > end - start) throw new Error("Thời lượng slot hoặc giờ hoạt động không hợp lệ.");
     const format = value => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
     const slots = [];
     for (let at = start; at + duration <= end; at += duration) slots.push({ startTime: format(at), endTime: format(at + duration) });

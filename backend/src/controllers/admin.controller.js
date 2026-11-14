@@ -9,7 +9,7 @@ class AdminController {
             const result = await adminService.getAllCourts(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -18,7 +18,7 @@ class AdminController {
             const result = await adminService.getCourtDetail(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -27,7 +27,7 @@ class AdminController {
             const result = await adminService.createCourt(req.body, req.files);
             return res.status(201).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -36,7 +36,7 @@ class AdminController {
             const result = await adminService.updateCourt(req.params.id, req.body, req.files);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -45,7 +45,7 @@ class AdminController {
             const result = await adminService.deleteCourt(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -54,7 +54,7 @@ class AdminController {
             const result = await adminService.blockCourt(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -63,7 +63,7 @@ class AdminController {
             const subCourts = await adminService.getSubCourtsByCourtId(req.params.id);
             return res.status(200).json({ success: true, subCourts });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -73,7 +73,7 @@ class AdminController {
             const result = await adminService.deleteCourtImage(id, publicId);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -84,7 +84,7 @@ class AdminController {
             const result = await adminService.getAllBookings(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -93,7 +93,7 @@ class AdminController {
             const result = await adminService.confirmBooking(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -101,7 +101,14 @@ class AdminController {
         try {
             const result = await adminService.recordCashPayment(req.params.id, req.user.id);
             return res.json({ success: true, ...result });
-        } catch (error) { return res.status(400).json({ success: false, message: error.message }); }
+        } catch (error) { return res.status(error.status || 400).json({ success: false, message: error.message }); }
+    }
+
+    async recordRefund(req, res) {
+        try {
+            const result = await adminService.recordRefund(req.params.id, req.user.id);
+            return res.json({ success: true, ...result });
+        } catch (error) { return res.status(error.status || 400).json({ success: false, message: error.message }); }
     }
 
     async cancelBooking(req, res) {
@@ -110,7 +117,7 @@ class AdminController {
             const result = await adminService.cancelBooking(req.params.id, cancelReason);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -119,7 +126,7 @@ class AdminController {
             const result = await adminService.completeBooking(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -129,7 +136,7 @@ class AdminController {
             const result = await adminService.getAllEquipments(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -142,7 +149,7 @@ class AdminController {
             const result = await adminService.createEquipment(req.user.id, data);
             return res.status(201).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -155,7 +162,7 @@ class AdminController {
             const result = await adminService.updateEquipment(req.params.id, data);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -164,7 +171,7 @@ class AdminController {
             const result = await adminService.deleteEquipment(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -174,7 +181,7 @@ class AdminController {
             const result = await adminService.stockIn(req.params.id, quantity);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -183,7 +190,7 @@ class AdminController {
             const rentals = await adminService.getEquipmentRentals(req.params.id);
             return res.status(200).json({ success: true, rentals });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -194,7 +201,7 @@ class AdminController {
             const result = await adminService.createImportOrder(adminId, req.body);
             return res.status(201).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -203,7 +210,7 @@ class AdminController {
             const result = await adminService.getImportOrders(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -212,7 +219,7 @@ class AdminController {
             const result = await adminService.cancelImportOrder(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -222,7 +229,7 @@ class AdminController {
             const result = await adminService.getAllMaintenance(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -232,7 +239,7 @@ class AdminController {
             const result = await adminService.createMaintenance(adminId, req.body, req.files);
             return res.status(201).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -242,7 +249,7 @@ class AdminController {
             const result = await adminService.updateMaintenanceStatus(req.params.id, status);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -252,7 +259,7 @@ class AdminController {
             const result = await adminService.getDashboardStats();
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -261,7 +268,7 @@ class AdminController {
             const result = await adminService.getRevenueStats(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -270,7 +277,7 @@ class AdminController {
             const result = await adminService.getEquipmentStats();
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -279,7 +286,7 @@ class AdminController {
             const result = await adminService.getPeakHours();
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -289,7 +296,7 @@ class AdminController {
             const result = await adminService.getAllUsers(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -298,7 +305,7 @@ class AdminController {
             const result = await adminService.getUserDetail(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -307,7 +314,7 @@ class AdminController {
             const result = await adminService.toggleUserStatus(req.params.id);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -316,7 +323,7 @@ class AdminController {
             const result = await adminService.updateUserRole(req.params.id, req.body);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -326,7 +333,7 @@ class AdminController {
             const settings = await adminService.getSettings();
             return res.status(200).json({ success: true, settings });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -335,7 +342,7 @@ class AdminController {
             const settings = await adminService.updateSettings(req.body);
             return res.status(200).json({ success: true, message: "Cập nhật cấu hình thành công!", settings });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 

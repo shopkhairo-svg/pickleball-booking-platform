@@ -37,6 +37,7 @@ class BookingController {
         } catch (error) {
             return res.status(error.status || 400).json({
                 success: false,
+                ...(["RESERVATION_FAILED", "SLOT_ALREADY_BOOKED", "SLOT_UNAVAILABLE"].includes(error.code) ? { code: error.code } : {}),
                 message: error.message
             });
         }

@@ -14,7 +14,7 @@ class ReviewController {
             });
             return res.status(201).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -23,7 +23,7 @@ class ReviewController {
             const result = await reviewService.getReviewsByCourt(req.params.courtId, req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -32,7 +32,7 @@ class ReviewController {
             const result = await reviewService.getEligibility(req.user.id, req.params.courtId);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -41,7 +41,7 @@ class ReviewController {
             const result = await reviewService.getAdminReviews(req.query);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -50,7 +50,7 @@ class ReviewController {
             const result = await reviewService.getMyBookingReview(req.user.id, req.params.bookingId);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 
@@ -59,7 +59,7 @@ class ReviewController {
             const result = await reviewService.updateReviewStatus(req.params.id, req.body.status);
             return res.status(200).json({ success: true, ...result });
         } catch (error) {
-            return res.status(400).json({ success: false, message: error.message });
+            return res.status(error.status || 400).json({ success: false, message: error.message });
         }
     }
 }

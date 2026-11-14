@@ -55,8 +55,15 @@ test("SMTP and Google configuration", () => {
 
 test("Auth API contracts with isolated DB, Redis, SMTP and Google doubles", async t => {
     const { default: routes } = await import("../src/routes/auth.routes.js");
+    const { verifyToken, requireAdmin, requireVendor, optionalAuth, verifyStreamToken } = await import("../src/middlewares/auth.middleware.js");
+    const { default: jwtUtil } = await import("../src/utils/jwt.util.js");
     const app = express();
     app.use(express.json());
+    app.post("/api/auth/probe", verifyToken, (req, res) => res.json({ role: req.user.role }));
+    app.post("/api/auth/admin-probe", verifyToken, requireAdmin, (req, res) => res.json({ ok: true }));
+    app.post("/api/auth/vendor-probe", verifyToken, requireVendor, (req, res) => res.json({ ok: true }));
+    app.post("/api/auth/optional-probe", optionalAuth, (req, res) => res.json({ role: req.user?.role || null }));
+    app.post("/api/auth/stream-probe", verifyStreamToken, (req, res) => res.json({ role: req.user.role }));
     app.use("/api/auth", routes);
     const server = app.listen(0, "127.0.0.1");
     await new Promise(resolve => server.once("listening", resolve));
@@ -109,12 +116,45 @@ test("Auth API contracts with isolated DB, Redis, SMTP and Google doubles", asyn
         assert.equal((await request("refresh-token", { refreshToken: "invalid" })).status, 401);
         assert.equal((await request("refresh-token", { refreshToken: session.refreshToken })).status, 200);
     });
+    await t.test("existing JWTs respect account blocking, deletion and role changes immediately", async () => {
+        const user = users.get("user@example.com");
+        const adminToken = jwtUtil.generateAccessToken({ id: user._id, role: "ADMIN" });
+        assert.equal((await request("admin-probe", {}, "POST", adminToken)).status, 403);
+        user.role = "ADMIN";
+        assert.equal((await request("admin-probe", {}, "POST", session.accessToken)).status, 200);
+        user.role = "USER";
+        user.status = "BLOCKED";
+        assert.equal((await request("probe", {}, "POST", session.accessToken)).status, 403);
+        assert.equal((await request("optional-probe", {}, "POST", session.accessToken)).body.role, null);
+        assert.equal((await request(`stream-probe?token=${session.accessToken}`)).status, 403);
+        user.status = "ACTIVE";
+        users.delete(user.email);
+        assert.equal((await request("probe", {}, "POST", session.accessToken)).status, 401);
+        users.set(user.email, user);
+        assert.equal((await request("probe", {}, "POST", session.accessToken)).status, 200);
+    });
     await t.test("forgot-password failure does not consume email quota", async () => {
         failMail = true;
         assert.equal((await request("forgot-password", { email: "user@example.com" })).status, 503);
         assert.equal(records.has("forgot-password-otp:user@example.com"), false);
         assert.equal(Number(records.get("forgot-password-count:user@example.com")), 0);
         failMail = false;
+    });
+    await t.test("only court vendors can access active vendor business APIs", async () => {
+        const user = users.get("user@example.com");
+        assert.equal((await request("vendor-probe", {}, "POST", session.accessToken)).status, 403);
+        user.role = "VENDOR";
+        for (const vendorType of ["EQUIPMENT", null]) {
+            user.vendorType = vendorType;
+            const response = await request("vendor-probe", {}, "POST", session.accessToken);
+            assert.equal(response.status, 501);
+            assert.equal(response.body.code, "FEATURE_IN_DEVELOPMENT");
+            assert.equal((await request("probe", {}, "POST", session.accessToken)).status, 200);
+        }
+        user.vendorType = "COURT";
+        assert.equal((await request("vendor-probe", {}, "POST", session.accessToken)).status, 200);
+        user.role = "USER";
+        user.vendorType = null;
     });
     await t.test("reset-password changes password and revokes refresh session", async () => {
         assert.equal((await request("forgot-password", { email: "user@example.com" })).status, 200);

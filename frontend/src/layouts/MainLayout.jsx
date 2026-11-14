@@ -56,7 +56,7 @@ export default function MainLayout() {
                             {isAuthenticated && (
                                 <NavLink to="/user/rewards" className={getNavLinkClass}>
                                     <span className="material-symbols-outlined text-[17px]">workspace_premium</span>
-                                    Ưu đãi
+                                    Ưu đãi · Đang phát triển
                                 </NavLink>
                             )}
                         </nav>
@@ -137,7 +137,7 @@ export default function MainLayout() {
                                 </span>
                             </div>
                             <p className="text-sm text-zinc-400 leading-relaxed">
-                                Đặt sân, thanh toán, thuê dụng cụ và theo dõi lịch chơi trong một trải nghiệm gọn gàng.
+                                Tìm sân, đặt lịch và theo dõi lịch chơi trong một trải nghiệm gọn gàng.
                             </p>
                         </div>
                         <div>

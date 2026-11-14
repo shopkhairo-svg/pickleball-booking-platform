@@ -1,3 +1,4 @@
+import { parseCourtInput, courtText, courtStatus, scheduleChanged, assertCourtCanClose, assertScheduleAllowsBookings } from "../utils/courtInput.js";
 import mongoose from "mongoose";
 import Court from "../models/court.model.js";
 import Equipment from "../models/equipment.model.js";
@@ -11,7 +12,7 @@ import ImportOrder from "../models/importOrder.model.js";
 import Maintenance from "../models/maintenance.model.js";
 import User from "../models/user.model.js";
 import Delivery from "../models/delivery.model.js";
-import { generateSlotsForNewSubCourt } from "../utils/slotScheduler.js";
+import { generateSlotsForNewSubCourt, regenerateSlotsForCourt } from "../utils/slotScheduler.js";
 import bookingService from "./booking.service.js";
 
 
@@ -68,17 +69,17 @@ class VendorService {
             monthlyRevenueRaw
         ] = await Promise.all([
             SubCourt.countDocuments({ courtId: { $in: courtIds } }),
-            Booking.countDocuments({ courtId: { $in: courtIds } }),
-            Booking.countDocuments({ courtId: { $in: courtIds }, status: "PENDING" }),
+            Booking.countDocuments({ courtId: { $in: courtIds }, reservationState: { $nin: ["PREPARING", "FAILED"] } }),
+            Booking.countDocuments({ courtId: { $in: courtIds }, status: "PENDING", reservationState: { $nin: ["PREPARING", "FAILED"] } }),
             Booking.countDocuments({ courtId: { $in: courtIds }, status: "CONFIRMED" }),
             Booking.countDocuments({ courtId: { $in: courtIds }, status: "COMPLETED" }),
-            Booking.countDocuments({ courtId: { $in: courtIds }, status: "CANCELLED" }),
+            Booking.countDocuments({ courtId: { $in: courtIds }, status: "CANCELLED", reservationState: { $nin: ["PREPARING", "FAILED"] } }),
             Booking.aggregate([
                 { $match: { courtId: { $in: courtIds }, status: "COMPLETED", paymentStatus: "PAID" } },
                 { $group: { _id: null, total: { $sum: "$totalPrice" } } }
             ]),
             Review.aggregate([
-                { $match: { courtId: { $in: courtIds } } },
+                { $match: { courtId: { $in: courtIds }, status: "APPROVED" } },
                 { $group: { _id: null, avgRating: { $avg: "$rating" }, count: { $sum: 1 } } }
             ]),
             Booking.aggregate([
@@ -92,7 +93,7 @@ class VendorService {
                 },
                 {
                     $group: {
-                        _id: { $substr: ["$createdAt", 5, 2] },
+                        _id: { $dateToString: { format: "%m", date: "$createdAt", timezone: "Asia/Ho_Chi_Minh" } },
                         revenue: { $sum: "$totalPrice" },
                         bookings: { $sum: 1 }
                     }
@@ -192,142 +193,37 @@ class VendorService {
     }
 
     async createVendorCourt(vendorId, courtData, files) {
-        const { name, location, address, type, description, pricePerHour, openTime, closeTime, slotDuration, amenities } = courtData;
-
-        const vendor = await User.findOne({
-            _id: vendorId,
-            role: "VENDOR",
-            vendorType: "COURT",
-            status: "ACTIVE"
-        });
-        if (!vendor) {
-            throw new Error("Chỉ chủ sân đang hoạt động mới được tạo cụm sân!");
-        }
-
+        const input = parseCourtInput(courtData);
+        const vendor = await User.findOne({ _id: vendorId, role: "VENDOR", vendorType: "COURT", status: "ACTIVE" });
+        if (!vendor) throw new Error("Chỉ chủ sân đang hoạt động mới được tạo cụm sân!");
         const existingCourt = await Court.findOne({ vendorId }).select("name");
-        if (existingCourt) {
-            throw new Error(`Bạn đã sở hữu sân "${existingCourt.name}". Mỗi chủ sân chỉ được quản lý 1 cụm sân!`);
-        }
-
-        if (!name || !location || !type || !pricePerHour) {
-            throw new Error("Vui lòng điền đầy đủ thông tin bắt buộc!");
-        }
-
-        const images = files && files.length > 0
-            ? files.map(file => ({ imageUrl: file.path, publicId: file.filename }))
-            : [];
-
-        const parsedAmenities = amenities
-            ? (typeof amenities === "string" ? amenities.split(",").map(a => a.trim()) : amenities)
-            : [];
-
-        const court = await Court.create({
-            name: name.trim(),
-            location: location.trim(),
-            address: address?.trim() || "",
-            type: type.toUpperCase(),
-            description: description?.trim() || "",
-            pricePerHour: parseInt(pricePerHour),
-            openTime: openTime || "06:00",
-            closeTime: closeTime || "22:00",
-            slotDuration: parseInt(slotDuration) || 60,
-            amenities: parsedAmenities,
-            images,
-            status: "AVAILABLE",
-            vendorId
-        });
-
-        // Tạo mặc định 2 sân nhỏ (SubCourts) để dùng luôn
-        const sub1 = await SubCourt.create({ courtId: court._id, name: "Sân nhỏ số 1 (VIP)", status: "AVAILABLE" });
-        const sub2 = await SubCourt.create({ courtId: court._id, name: "Sân nhỏ số 2 (Standard)", status: "AVAILABLE" });
-
-        // Tự động sinh slot 7 ngày trống
-        const datesToSeed = [];
-        for (let i = 0; i < 7; i++) {
-            const d = new Date();
-            d.setDate(d.getDate() + i);
-            datesToSeed.push(d.toLocaleDateString("sv-SE"));
-        }
-
-        const startH = parseInt(court.openTime.split(":")[0]) || 6;
-        const endH = parseInt(court.closeTime.split(":")[0]) || 22;
-
-        const slots = [];
-        for (const dateStr of datesToSeed) {
-            for (const sub of [sub1, sub2]) {
-                // ✅ Fix #8: Dùng slotDuration thật thay vì hardcode 60 phút
-                const slotDurationMin = court.slotDuration || 60;
-                let currentHour = startH;
-                let currentMin = 0;
-
-                while (true) {
-                    const totalMinStart = currentHour * 60 + currentMin;
-                    const totalMinEnd = totalMinStart + slotDurationMin;
-                    const endHour = Math.floor(totalMinEnd / 60);
-                    const endMin = totalMinEnd % 60;
-
-                    // Dừng nếu giờ kết thúc vượt quá giờ đóng cửa
-                    if (endHour > endH || (endHour === endH && endMin > 0)) break;
-
-                    const startStr = `${String(currentHour).padStart(2, "0")}:${String(currentMin).padStart(2, "0")}`;
-                    const endStr = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
-
-                    slots.push({
-                        subCourtId: sub._id,
-                        courtId: court._id,
-                        date: dateStr,
-                        startTime: startStr,
-                        endTime: endStr,
-                        isBooked: false
-                    });
-
-                    // Tăng theo đúng slotDuration
-                    const nextMin = totalMinStart + slotDurationMin;
-                    currentHour = Math.floor(nextMin / 60);
-                    currentMin = nextMin % 60;
-                }
-            }
-        }
-        await CourtSlot.insertMany(slots);
-
-        return court;
+        if (existingCourt) throw new Error(`Bạn đã sở hữu sân "${existingCourt.name}". Mỗi chủ sân chỉ được quản lý 1 cụm sân!`);
+        const images = files?.map(file => ({ imageUrl: file.path, publicId: file.filename })) || [];
+        const court = await Court.create({ ...input, images, status: "AVAILABLE", vendorId });
+        await SubCourt.insertMany([
+            { courtId: court._id, name: "Sân nhỏ số 1 (VIP)", status: "AVAILABLE" },
+            { courtId: court._id, name: "Sân nhỏ số 2 (Standard)", status: "AVAILABLE" }
+        ]);
+        let slotsPending = false;
+        try { await regenerateSlotsForCourt(court._id); }
+        catch (error) { slotsPending = true; console.error("[Slots] Generation pending", String(court._id), error.message); }
+        return { ...court.toObject(), slotsPending };
     }
 
     async updateVendorCourt(vendorId, courtId, courtData, files) {
         const court = await Court.findOne({ _id: courtId, vendorId });
         if (!court) throw new Error("Cụm sân không tồn tại hoặc không thuộc quyền quản lý của bạn!");
-
-        const updateData = {};
-        if (courtData.name) updateData.name = courtData.name.trim();
-        if (courtData.location) updateData.location = courtData.location.trim();
-        if (courtData.address !== undefined) updateData.address = courtData.address.trim();
-        if (courtData.type) updateData.type = courtData.type.toUpperCase();
-        if (courtData.description !== undefined) updateData.description = courtData.description.trim();
-        if (courtData.pricePerHour) updateData.pricePerHour = parseInt(courtData.pricePerHour);
-        if (courtData.openTime) updateData.openTime = courtData.openTime;
-        if (courtData.closeTime) updateData.closeTime = courtData.closeTime;
-        if (courtData.slotDuration) updateData.slotDuration = parseInt(courtData.slotDuration);
-        if (courtData.status) updateData.status = courtData.status.toUpperCase();
-
-        if (courtData.amenities) {
-            updateData.amenities = typeof courtData.amenities === "string"
-                ? courtData.amenities.split(",").map(a => a.trim())
-                : courtData.amenities;
+        const updateData = parseCourtInput(courtData, court);
+        if (updateData.status && updateData.status !== "AVAILABLE" && updateData.status !== court.status) await assertCourtCanClose({ courtId });
+        await assertScheduleAllowsBookings(courtId, updateData, court);
+        if (files?.length) updateData.images = [...court.images, ...files.map(file => ({ imageUrl: file.path, publicId: file.filename }))];
+        const updated = await Court.findByIdAndUpdate(courtId, { $set: updateData }, { new: true, runValidators: true });
+        let slotsPending = false;
+        if (updated.status === "AVAILABLE" && (scheduleChanged(updateData, court) || court.status !== "AVAILABLE")) {
+            try { await regenerateSlotsForCourt(courtId); }
+            catch (error) { slotsPending = true; console.error("[Slots] Reconciliation pending", String(courtId), error.message); }
         }
-
-        if (files && files.length > 0) {
-            const newImages = files.map(file => ({ imageUrl: file.path, publicId: file.filename }));
-            updateData.images = [...court.images, ...newImages];
-        }
-
-        const updated = await Court.findByIdAndUpdate(courtId, { $set: updateData }, { new: true });
-        if (updateData.status === "AVAILABLE") {
-            const subCourts = await SubCourt.find({ courtId, status: "AVAILABLE" });
-            for (const sub of subCourts) {
-                await generateSlotsForNewSubCourt(courtId, sub);
-            }
-        }
-        return updated;
+        return { ...updated.toObject(), slotsPending };
     }
 
     async deleteVendorCourt(vendorId, courtId) {
@@ -335,6 +231,7 @@ class VendorService {
         if (!court) throw new Error("Cụm sân không tồn tại hoặc không thuộc quyền quản lý của bạn!");
 
         // Soft delete (Ẩn sân)
+        await assertCourtCanClose({ courtId });
         return await Court.findByIdAndUpdate(courtId, { $set: { status: "HIDDEN" } }, { new: true });
     }
 
@@ -405,11 +302,10 @@ class VendorService {
 
     // 4. Quản lý Đơn hàng (Vendor Bookings)
     async getVendorBookings(vendorId, query) {
-        await bookingService.autoCompletePastBookings();
         const courts = await Court.find({ vendorId });
         const courtIds = courts.map(c => c._id);
 
-        const filter = { courtId: { $in: courtIds } };
+        const filter = { courtId: { $in: courtIds }, reservationState: { $nin: ["PREPARING", "FAILED"] } };
         if (query.status) filter.status = query.status.toUpperCase();
 
         const bookings = await Booking.find(filter)
@@ -930,7 +826,8 @@ class VendorService {
           return await SubCourt.find({ courtId }).sort({ name: 1 });
       }
 
-      async createVendorSubCourt(vendorId, courtId, name) {
+      async createVendorSubCourt(vendorId, courtId, rawName) {
+          const name = courtText(rawName, "Tên sân nhỏ", { required: true });
           if (!courtId || !name) throw new Error("Vui lòng nhập đầy đủ thông tin!");
           const court = await Court.findOne({ _id: courtId, vendorId });
           if (!court) throw new Error("Cụm sân không tồn tại hoặc không thuộc quyền quản lý của bạn!");
@@ -956,7 +853,8 @@ class VendorService {
       }
 
       async updateVendorSubCourt(vendorId, subCourtId, data) {
-          const { name, status } = data;
+          const name = data.name === undefined ? undefined : courtText(data.name, "Tên sân nhỏ", { required: true });
+          const status = data.status === undefined ? undefined : courtStatus(data.status);
           const subCourt = await SubCourt.findById(subCourtId);
           if (!subCourt) throw new Error("Sân nhỏ không tồn tại!");
 
@@ -981,15 +879,7 @@ class VendorService {
               }
 
               if (["MAINTENANCE", "HIDDEN"].includes(upperStatus)) {
-                  const todayStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).split(" ")[0];
-                  const activeBookingsExist = await CourtSlot.exists({
-                      subCourtId,
-                      date: { $gte: todayStr },
-                      isBooked: true
-                  });
-                  if (activeBookingsExist) {
-                      throw new Error("Không thể thay đổi trạng thái sân nhỏ này vì đã có lịch đặt trong tương lai!");
-                  }
+                  await assertCourtCanClose({ subCourtId });
               }
               subCourt.status = upperStatus;
           }
@@ -1010,14 +900,7 @@ class VendorService {
           if (!court) throw new Error("Sân nhỏ này không thuộc cụm sân bạn quản lý!");
 
           const todayStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }).split(" ")[0];
-          const activeBookingsExist = await CourtSlot.exists({
-              subCourtId,
-              date: { $gte: todayStr },
-              isBooked: true
-          });
-          if (activeBookingsExist) {
-              throw new Error("Không thể xóa sân nhỏ này vì đã có lịch đặt trong tương lai!");
-          }
+          await assertCourtCanClose({ subCourtId });
 
           subCourt.status = "HIDDEN";
           await subCourt.save();

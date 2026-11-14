@@ -17,6 +17,7 @@ const statusConfig = {
 const paymentConfig = {
     UNPAID: { label: "Chưa thanh toán", cls: "bg-orange-100 text-orange-700" },
     PAID: { label: "Đã thanh toán", cls: "bg-green-100 text-green-700" },
+    REFUND_PENDING: { label: "Chờ hoàn tiền", cls: "bg-amber-100 text-amber-700" },
     REFUNDED: { label: "Đã hoàn tiền", cls: "bg-purple-100 text-purple-700" },
 };
 
@@ -271,150 +272,7 @@ function ReviewedBadge({ review }) {
     );
 }
 
-// ─── Repay Modal ──────────────────────────────────────────────────────────────
-function RepayModal({ booking, onClose, onSuccess }) {
-    const [paymentData, setPaymentData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [verifying, setVerifying] = useState(false);
-    const [verified, setVerified] = useState(false);
-    const [error, setError] = useState("");
-
-    useEffect(() => {
-        userService.getPaymentIntent(booking._id)
-            .then(res => {
-                if (res.success) {
-                    setPaymentData({
-                        qrCodeUrl: res.qrCodeUrl,
-                        paymentDescription: res.paymentDescription,
-                        totalPrice: booking.totalPrice,
-                        bookingCode: booking.bookingCode,
-                    });
-                } else {
-                    setPaymentData({
-                        qrCodeUrl: `https://img.vietqr.io/image/MB-0900000002-qr_only.png?amount=${booking.totalPrice}&addInfo=CHUYEN%20TIEN%20SAN%20${booking.bookingCode}`,
-                        paymentDescription: `CHUYEN TIEN SAN ${booking.bookingCode}`,
-                        totalPrice: booking.totalPrice,
-                        bookingCode: booking.bookingCode,
-                    });
-                }
-            })
-            .catch(() => {
-                setPaymentData({
-                    qrCodeUrl: `https://img.vietqr.io/image/MB-0900000002-qr_only.png?amount=${booking.totalPrice}&addInfo=CHUYEN%20TIEN%20SAN%20${booking.bookingCode}`,
-                    paymentDescription: `CHUYEN TIEN SAN ${booking.bookingCode}`,
-                    totalPrice: booking.totalPrice,
-                    bookingCode: booking.bookingCode,
-                });
-            })
-            .finally(() => setLoading(false));
-    }, [booking._id]);
-
-    const handleVerify = async () => {
-        setVerifying(true);
-        setError("");
-        try {
-            const res = await userService.confirmPayment(booking._id, "BANKING");
-            if (res.success) {
-                setVerified(true);
-                setTimeout(() => onSuccess(), 1500);
-            }
-        } catch (err) {
-            setError(err?.response?.data?.message || "Xác minh thất bại, vui lòng thử lại!");
-        } finally {
-            setVerifying(false);
-        }
-    };
-
-    const formatMoney = (n) => n?.toLocaleString("vi-VN") + "đ";
-
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)" }}
-            onClick={(e) => e.target === e.currentTarget && onClose()}
-        >
-            <div className="bg-white rounded-2xl shadow-soft w-full max-w-sm overflow-hidden animate-fadeIn">
-                {/* Header */}
-                <div className="bg-ink px-6 py-4 relative">
-                    <button onClick={onClose} className="absolute right-4 top-4 text-white/70 hover:text-white transition-colors">
-                        <span className="material-symbols-outlined text-[22px]">close</span>
-                    </button>
-                    <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-white text-[20px]">qr_code_2</span>
-                        </div>
-                        <div>
-                            <h3 className="text-white font-bold">Thanh toán đơn đặt sân</h3>
-                            <p className="text-white/65 text-xs mt-0.5">#{booking.bookingCode}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="p-5 space-y-4 text-center">
-                    {loading ? (
-                        <div className="py-8 flex flex-col items-center gap-2">
-                            <div className="animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent" />
-                            <p className="text-sm text-gray-400">Đang tải thông tin thanh toán...</p>
-                        </div>
-                    ) : verified ? (
-                        <div className="py-6 space-y-3">
-                            <div className="w-12 h-12 mx-auto bg-emerald-100 rounded-full flex items-center justify-center">
-                                <span className="material-symbols-outlined text-emerald-600 text-2xl" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-                            </div>
-                            <p className="font-bold text-gray-800">Xác nhận thanh toán thành công!</p>
-                            <p className="text-xs text-gray-500">Đơn đặt sân đã được xác nhận thanh toán.</p>
-                        </div>
-                    ) : (
-                        <>
-                            <p className="text-xs text-gray-500 leading-relaxed">
-                                Quét mã QR bằng ứng dụng ngân hàng để chuyển khoản thanh toán:
-                            </p>
-                            <div className="w-44 h-44 mx-auto border-2 border-emerald-100 rounded-2xl overflow-hidden p-1 shadow-inner bg-emerald-50">
-                                <img src={paymentData.qrCodeUrl} alt="VietQR" className="w-full h-full object-contain" />
-                            </div>
-                            <div className="bg-gray-50 p-3 rounded-xl text-xs font-semibold text-gray-600 space-y-1.5 border border-gray-100 text-left">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Ngân hàng:</span>
-                                    <span>MB Bank (Quân Đội)</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Số tài khoản:</span>
-                                    <span className="text-primary font-bold">0900000002</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Số tiền:</span>
-                                    <span className="text-red-500 font-bold">{formatMoney(paymentData.totalPrice)}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Nội dung CK:</span>
-                                    <span className="text-primary font-bold select-all">{paymentData.paymentDescription}</span>
-                                </div>
-                            </div>
-                            <p className="text-[10px] text-gray-400">Lưu ý: Nội dung chuyển khoản phải ghi chính xác để hệ thống tự động duyệt.</p>
-                            {error && (
-                                <p className="text-xs text-red-500 font-semibold bg-red-50 px-3 py-2 rounded-xl border border-red-200">{error}</p>
-                            )}
-                            <div className="flex gap-3">
-                                <button type="button" onClick={onClose}
-                                    className="flex-1 py-2.5 border border-gray-200 text-gray-600 font-bold rounded-xl text-xs hover:bg-gray-50 transition-all">
-                                    Đóng
-                                </button>
-                                <button type="button" onClick={handleVerify} disabled={verifying}
-                                    className="flex-1 py-2.5 bg-primary text-white font-bold rounded-xl text-xs hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all shadow-sm shadow-primary/20">
-                                    {verifying ? "Đang xác minh..." : (
-                                        <><span className="material-symbols-outlined text-[15px] animate-spin">autorenew</span>Xác minh thanh toán</>
-                                    )}
-                                </button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ─── Booking Detail Modal ──────────────────────────────────────────────────────
+// ─── Booking Detail Modal ─────────────────────────────────────────────────────
 function BookingDetailModal({ booking, onClose }) {
     const status = statusConfig[booking.status] || { label: booking.status, cls: "bg-gray-100 text-gray-600" };
     const payment = paymentConfig[booking.paymentStatus] || { label: booking.paymentStatus, cls: "bg-gray-100 text-gray-600" };
@@ -603,12 +461,11 @@ function BookingDetailModal({ booking, onClose }) {
 }
 
 // ─── Sub-component: Booking Card ──────────────────────────────────────────────
-function BookingCard({ booking, onCancel, onReview, onRepay, onViewDetail }) {
+function BookingCard({ booking, onCancel, onReview, onViewDetail }) {
     const status = statusConfig[booking.status] || { label: booking.status, cls: "bg-gray-100 text-gray-600" };
     const payment = paymentConfig[booking.paymentStatus] || { label: booking.paymentStatus, cls: "bg-gray-100 text-gray-600" };
     const canCancel = !["CANCELLED", "COMPLETED"].includes(booking.status);
     const canReview = booking.status === "COMPLETED" && booking.paymentStatus === "PAID";
-    const canRepay = false; // Online payments are not released.
     const formatMoney = (n) => n?.toLocaleString("vi-VN") + "đ";
 
     return (
@@ -638,15 +495,6 @@ function BookingCard({ booking, onCancel, onReview, onRepay, onViewDetail }) {
                         Chi tiết
                     </button>
                     {/* Nút đánh giá */}
-                    {canRepay && (
-                        <button
-                            onClick={() => onRepay(booking)}
-                            className="flex items-center gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all"
-                        >
-                            <span className="material-symbols-outlined text-[15px]">payments</span>
-                            Thanh toán ngay
-                        </button>
-                    )}
                     {canReview && !booking._review && (
                         <button
                             onClick={() => onReview(booking)}
@@ -706,13 +554,15 @@ function BookingCard({ booking, onCancel, onReview, onRepay, onViewDetail }) {
             </div>
 
             {/* Banner hoàn tiền */}
-            {booking.status === "CANCELLED" && booking.paymentStatus === "REFUNDED" && (
+            {booking.status === "CANCELLED" && ["REFUND_PENDING", "REFUNDED"].includes(booking.paymentStatus) && (
                 <div className="mx-5 mb-4 flex items-start gap-2.5 p-3 bg-amber-50 rounded-xl border border-amber-200">
                     <span className="material-symbols-outlined text-amber-500 text-[18px] flex-shrink-0 mt-0.5">account_balance_wallet</span>
                     <div>
-                        <p className="text-xs font-bold text-amber-700">Hoàn tiền đang được xử lý</p>
+                        <p className="text-xs font-bold text-amber-700">{booking.paymentStatus === "REFUNDED" ? "Đã ghi nhận hoàn tiền" : "Đang chờ hoàn tiền"}</p>
                         <p className="text-xs text-amber-600 mt-0.5">
-                            Số tiền <span className="font-black">{formatMoney(booking.totalPrice)}</span> sẽ được hoàn lại trong vòng <span className="font-bold">24 giờ làm việc</span> qua phương thức thanh toán ban đầu.
+                            {booking.paymentStatus === "REFUNDED"
+                                ? <>Quản trị viên đã ghi nhận hoàn lại <span className="font-black">{formatMoney(booking.totalPrice)}</span>. Nếu chưa nhận được tiền, vui lòng liên hệ sân để đối soát.</>
+                                : <>Số tiền cần hoàn là <span className="font-black">{formatMoney(booking.totalPrice)}</span>. Vui lòng liên hệ sân để thống nhất cách nhận tiền; trạng thái được cập nhật khi quản trị viên xác nhận đã hoàn.</>}
                         </p>
                     </div>
                 </div>
@@ -739,7 +589,6 @@ export default function UserProfile() {
     const [reviewTarget, setReviewTarget] = useState(null); // booking đang muốn review
     const [reviewSuccess, setReviewSuccess] = useState(false);
     const [detailTarget, setDetailTarget] = useState(null);
-    const [payingBooking, setPayingBooking] = useState(null);
 
     // Edit form state
     const [editForm, setEditForm] = useState({ fullName: "", phone: "" });
@@ -764,7 +613,7 @@ export default function UserProfile() {
                 }
             })
             .finally(() => setLoadingProfile(false));
-    }, []);
+    }, [storeUser]);
 
     // ── Fetch bookings + review status ──
     const fetchBookings = useCallback(async () => {
@@ -1191,7 +1040,6 @@ export default function UserProfile() {
                                             booking={booking}
                                             onCancel={handleCancelBooking}
                                             onReview={setReviewTarget}
-                                            onRepay={setPayingBooking}
                                             onViewDetail={setDetailTarget}
                                         />
                                     ))}
@@ -1221,14 +1069,6 @@ export default function UserProfile() {
                 />
             )}
 
-            {/* ─── Repay Modal ───────────────────────────────────────── */}
-            {payingBooking && (
-                <RepayModal
-                    booking={payingBooking}
-                    onClose={() => setPayingBooking(null)}
-                    onSuccess={() => { setPayingBooking(null); fetchBookings(); }}
-                />
-            )}
         </div>
     );
 }

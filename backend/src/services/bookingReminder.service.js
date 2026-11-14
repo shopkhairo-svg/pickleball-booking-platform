@@ -7,40 +7,52 @@ export const reminderIsDue = (booking, now) => booking.status === "CONFIRMED" &&
     && bookingStart(booking) > now && bookingStart(booking) - now <= 30 * 60000;
 
 // One-minute polling, persistent claims and retries; SMTP delivery is at-least-once.
-export async function runBookingReminders({ model = Booking, mail = mailUtils, now = new Date() } = {}) {
+export async function runBookingReminders({ model = Booking, mail = mailUtils, now, clock = () => new Date() } = {}) {
     mail.assertConfigured();
+    // A fixed `now` is useful for tests; production refreshes the clock for every claim.
+    const getNow = now === undefined ? clock : () => new Date(now);
+    const startedAt = getNow();
     const day = date => date.toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
-    const query = {
+    const available = at => ({
         status: "CONFIRMED", reminderSentAt: null,
-        bookingDate: { $in: [...new Set([day(now), day(new Date(+now + 30 * 60000))])] },
         $and: [
-            { $or: [{ reminderLeaseUntil: null }, { reminderLeaseUntil: { $lte: now } }] },
-            { $or: [{ reminderRetryAt: null }, { reminderRetryAt: { $lte: now } }] }
+            { $or: [{ reminderLeaseUntil: null }, { reminderLeaseUntil: { $lte: at } }] },
+            { $or: [{ reminderRetryAt: null }, { reminderRetryAt: { $lte: at } }] }
         ]
+    });
+    const query = {
+        ...available(startedAt),
+        bookingDate: { $in: [...new Set([day(startedAt), day(new Date(+startedAt + 30 * 60000))])] }
     };
-    const candidates = await model.find(query).sort({ startTime: 1 }).lean();
+    const candidates = await model.find(query).sort({ bookingDate: 1, startTime: 1 }).lean();
     for (const candidate of candidates) {
-        if (!reminderIsDue(candidate, now)) continue;
+        const claimTime = getNow();
+        if (!reminderIsDue(candidate, claimTime)) continue;
         const claim = randomUUID();
-        const booking = await model.findOneAndUpdate({ ...query, _id: candidate._id }, {
-            $set: { reminderClaim: claim, reminderLeaseUntil: new Date(+now + 5 * 60000) }, $inc: { reminderAttempts: 1 }
+        const booking = await model.findOneAndUpdate({ ...available(claimTime), _id: candidate._id }, {
+            $set: { reminderClaim: claim, reminderLeaseUntil: new Date(+claimTime + 5 * 60000) }, $inc: { reminderAttempts: 1 }
         }, { new: true }).populate("userId", "fullName email").populate("courtId", "name address location");
         if (!booking) continue;
         try {
             // Recheck cancellation and start time after waiting for other emails.
-            const current = await model.findOne({ _id: booking._id, status: "CONFIRMED", reminderClaim: claim });
-            if (!current || bookingStart(booking) <= new Date()) {
+            const checkTime = getNow();
+            const current = await model.findOne({
+                _id: booking._id, status: "CONFIRMED", reminderSentAt: null,
+                reminderClaim: claim, reminderLeaseUntil: { $gt: checkTime }
+            });
+            const sendTime = getNow();
+            if (!current || current.reminderLeaseUntil <= sendTime || !reminderIsDue(current, sendTime)) {
                 await model.updateOne({ _id: booking._id, reminderClaim: claim }, { $unset: { reminderClaim: 1, reminderLeaseUntil: 1 } });
                 continue;
             }
             if (!booking.userId?.email) throw new Error("Booking user has no email");
             await mail.sendBookingReminder(booking);
             await model.updateOne({ _id: booking._id, reminderClaim: claim }, {
-                $set: { reminderSentAt: new Date() }, $unset: { reminderClaim: 1, reminderLeaseUntil: 1, reminderRetryAt: 1 }
+                $set: { reminderSentAt: getNow() }, $unset: { reminderClaim: 1, reminderLeaseUntil: 1, reminderRetryAt: 1 }
             });
         } catch (error) {
             await model.updateOne({ _id: booking._id, reminderClaim: claim }, {
-                $set: { reminderRetryAt: new Date(Date.now() + 2 * 60000) }, $unset: { reminderClaim: 1, reminderLeaseUntil: 1 }
+                $set: { reminderRetryAt: new Date(+getNow() + 2 * 60000) }, $unset: { reminderClaim: 1, reminderLeaseUntil: 1 }
             });
             console.error("[Reminder] Failed:", String(booking._id), error.message);
         }

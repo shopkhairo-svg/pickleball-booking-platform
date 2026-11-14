@@ -2,21 +2,32 @@ import crypto from "crypto";
 import Court from "../models/court.model.js";
 import FavoriteCourt from "../models/favoriteCourt.model.js";
 import CourtView from "../models/courtView.model.js";
+import { searchPattern } from "../utils/courtFilters.js";
+import { queryNumber } from "../utils/courtQuery.js";
+
+function validateGuestId(value) {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(value)) throw new Error("Mã khách truy cập không hợp lệ.");
+    return value;
+}
 
 class CourtInteractionService {
     async toggleFavorite(userId, courtId) {
         const court = await Court.findById(courtId);
         if (!court || court.status === "HIDDEN") throw new Error("Sân không tồn tại!");
 
-        const existing = await FavoriteCourt.findOne({ userId, courtId });
+        const existing = await FavoriteCourt.findOneAndDelete({ userId, courtId });
         if (existing) {
-            await existing.deleteOne();
-            await Court.findByIdAndUpdate(courtId, { $inc: { favoriteCount: -1 } });
+            await Court.updateOne({ _id: courtId, favoriteCount: { $gt: 0 } }, { $inc: { favoriteCount: -1 } });
             return { message: "Đã bỏ khỏi danh sách yêu thích!", isFavorite: false };
         }
 
-        await FavoriteCourt.create({ userId, courtId });
-        await Court.findByIdAndUpdate(courtId, { $inc: { favoriteCount: 1 } });
+        try {
+            await FavoriteCourt.create({ userId, courtId });
+            await Court.findByIdAndUpdate(courtId, { $inc: { favoriteCount: 1 } });
+        } catch (error) {
+            if (error.code !== 11000) throw error;
+        }
         return { message: "Đã thêm vào danh sách yêu thích!", isFavorite: true };
     }
 
@@ -27,7 +38,7 @@ class CourtInteractionService {
 
     async getFavorites(userId) {
         const favorites = await FavoriteCourt.find({ userId })
-            .populate("courtId")
+            .populate({ path: "courtId", match: { status: { $ne: "HIDDEN" } } })
             .sort({ createdAt: -1 });
 
         return {
@@ -41,8 +52,8 @@ class CourtInteractionService {
         const court = await Court.findById(courtId);
         if (!court || court.status === "HIDDEN") throw new Error("Sân không tồn tại!");
 
-        const safeGuestId = guestId || crypto.randomUUID();
-        const filter = userId ? { userId, courtId } : { guestId: safeGuestId, courtId };
+        const safeGuestId = (userId ? null : validateGuestId(guestId)) || crypto.randomUUID();
+        const filter = userId ? { userId, courtId } : { userId: null, guestId: safeGuestId, courtId };
 
         await CourtView.findOneAndUpdate(
             filter,
@@ -59,11 +70,14 @@ class CourtInteractionService {
     }
 
     async getRecentlyViewed({ userId, guestId, limit = 8 }) {
-        const filter = userId ? { userId } : { guestId };
+        const parsedLimit = queryNumber(limit, { fallback: 8, min: 1, max: 20, integer: true });
+        const safeGuestId = userId ? null : validateGuestId(guestId);
+        if (!userId && !safeGuestId) return { courts: [] };
+        const filter = userId ? { userId } : { userId: null, guestId: safeGuestId };
         const views = await CourtView.find(filter)
             .populate("courtId")
             .sort({ lastViewedAt: -1 })
-            .limit(Math.min(parseInt(limit, 10) || 8, 20));
+            .limit(parsedLimit);
 
         return {
             courts: views
@@ -74,7 +88,8 @@ class CourtInteractionService {
 
     async getSimilarCourts(courtId, limit = 4) {
         const court = await Court.findById(courtId);
-        if (!court) throw new Error("Sân không tồn tại!");
+        if (!court || court.status === "HIDDEN") throw new Error("Sân không tồn tại!");
+        const parsedLimit = queryNumber(limit, { fallback: 4, min: 1, max: 12, integer: true });
 
         const minPrice = Math.max(0, court.pricePerHour * 0.75);
         const maxPrice = court.pricePerHour * 1.25;
@@ -84,12 +99,12 @@ class CourtInteractionService {
             status: "AVAILABLE",
             $or: [
                 { type: court.type },
-                { location: { $regex: court.location, $options: "i" } },
+                { location: { $regex: searchPattern(court.location || ""), $options: "i" } },
                 { pricePerHour: { $gte: minPrice, $lte: maxPrice } }
             ]
         })
             .sort({ averageRating: -1, bookingCount: -1, favoriteCount: -1 })
-            .limit(Math.min(parseInt(limit, 10) || 4, 12));
+            .limit(parsedLimit);
 
         return { courts };
     }

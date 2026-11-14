@@ -15,6 +15,7 @@ import adminService from "../src/services/admin.service.js";
 import reviewService from "../src/services/review.service.js";
 import notificationService from "../src/services/notification.service.js";
 import { runBookingReminders } from "../src/services/bookingReminder.service.js";
+import { generateSlotsForNewSubCourt } from "../src/utils/slotScheduler.js";
 
 test("Core workflow against an isolated MongoDB database (no real emails)", async t => {
     const dbName = `pickleball_test_${randomUUID().replaceAll("-", "")}`;
@@ -35,12 +36,32 @@ test("Core workflow against an isolated MongoDB database (no real emails)", asyn
         const result = await courtService.getCourtsListing({ location: "binh thanh", search: "san", maxPrice: "100000" });
         assert.equal(result.courts.length, 1);
     });
+    await t.test("Nearby uses real distance, filters and free slots", async () => {
+        await adminService.updateCourt(court._id, { latitude: "10.7769", longitude: "106.7009" }, []);
+        const result = await courtService.getNearbyCourts({ lat: 10.7769, lng: 106.7009, radius: 1, date, location: "binh thanh", type: "INDOOR" });
+        assert.equal(result.courts.length, 1);
+        assert.equal(result.courts[0].distanceKm, 0);
+        assert.equal((await courtService.getNearbyCourts({ lat: 11.5, lng: 106.7009, radius: 1, date })).courts.length, 0);
+        assert.equal((await courtService.getNearbyCourts({ lat: 10.7769, lng: 106.7009, radius: 1, date, type: "OUTDOOR" })).courts.length, 0);
+        await CourtSlot.updateOne({ _id: slot._id }, { isBooked: true });
+        assert.equal((await courtService.getNearbyCourts({ lat: 10.7769, lng: 106.7009, radius: 1, date })).courts.length, 0);
+        await CourtSlot.updateOne({ _id: slot._id }, { isBooked: false });
+        await assert.rejects(() => courtService.getNearbyCourts({ lat: "", lng: 1 }));
+    });
+    await t.test("New sub-courts generate slots at the actual opening minutes", async () => {
+        const other = await Court.create({ name: "Timed court", location: "Test", type: "OUTDOOR", pricePerHour: 100000, openTime: "06:30", closeTime: "08:00", slotDuration: 45 });
+        const lane = await SubCourt.create({ courtId: other._id, name: "Lane 1" });
+        await generateSlotsForNewSubCourt(other._id, lane);
+        const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+        const slots = await CourtSlot.find({ subCourtId: lane._id, date: today }).sort({ startTime: 1 }).lean();
+        assert.deepEqual(slots.map(item => [item.startTime, item.endTime]), [["06:30", "07:15"], ["07:15", "08:00"]]);
+    });
     await t.test("Concurrent booking allows exactly one reservation; actual slot duration sets price", async () => {
         const outcomes = await Promise.allSettled(Array.from({ length: 8 }, () => createCoreBooking(user._id, { slotId: slot._id })));
         assert.equal(outcomes.filter(item => item.status === "fulfilled").length, 1);
         booked = outcomes.find(item => item.status === "fulfilled").value;
         assert.equal(booked.totalPrice, 52500);
-        assert.equal(await Booking.countDocuments(), 1);
+        assert.equal(await Booking.countDocuments({ reservationState: "COMMITTED" }), 1);
         assert.equal(String((await CourtSlot.findById(slot._id)).bookingId), String(booked.bookingId));
     });
     await t.test("Cash receipt requires confirmation and is recorded only once", async () => {

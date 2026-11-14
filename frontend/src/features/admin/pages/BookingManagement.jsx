@@ -12,6 +12,7 @@ const statusConfig = {
 const paymentConfig = {
     UNPAID:   { label: "Chưa TT",    cls: "bg-orange-100 text-orange-700" },
     PAID:     { label: "Đã TT",      cls: "bg-green-100 text-green-700" },
+    REFUND_PENDING: { label: "Chờ hoàn tiền", cls: "bg-amber-100 text-amber-700" },
     REFUNDED: { label: "Đã hoàn",    cls: "bg-purple-100 text-purple-700" },
 };
 
@@ -251,7 +252,7 @@ function CancelConfirmModal({ booking, onConfirm, onClose }) {
                         <div className="flex items-start gap-2.5 p-3 bg-amber-50 rounded-xl border border-amber-200">
                             <span className="material-symbols-outlined text-amber-500 text-[18px] flex-shrink-0">account_balance_wallet</span>
                             <p className="text-xs text-amber-700 font-medium">
-                                Đơn này đã thanh toán <span className="font-black">{booking.totalPrice?.toLocaleString("vi-VN")}đ</span>. Hệ thống sẽ tự động chuyển trạng thái sang "Đã hoàn tiền" và thông báo khách hàng.
+                                Đơn này đã thanh toán <span className="font-black">{booking.totalPrice?.toLocaleString("vi-VN")}đ</span>. Sau khi hủy, đơn chuyển sang "Chờ hoàn tiền". Chỉ xác nhận đã hoàn tiền sau khi bạn thực sự trả tiền cho khách.
                             </p>
                         </div>
                     )}
@@ -365,11 +366,20 @@ export default function BookingManagement() {
         }
     };
 
+    const handleRefund = async (id) => {
+        if (!window.confirm("Bạn đã thực sự hoàn đủ tiền cho khách? Thao tác này chỉ ghi nhận việc hoàn tiền đã thực hiện.")) return;
+        try {
+            await adminService.recordRefund(id);
+            showMsg("Đã ghi nhận hoàn tiền cho khách.");
+            fetchBookings();
+        } catch (err) { showMsg(err.response?.data?.message || err.message, "error"); }
+    };
+
     const handleCancelConfirm = async (id, reason) => {
         try {
             const res = await adminService.cancelBooking(id, reason);
             setCancelTarget(null);
-            const refundNote = res?.refunded ? " Đã chuyển trạng thái hoàn tiền." : "";
+            const refundNote = res?.refundPending ? " Đơn đang chờ hoàn tiền cho khách." : "";
             showMsg(`Đã hủy đơn thành công.${refundNote}`, "success");
             fetchBookings();
         } catch (err) {
@@ -529,6 +539,9 @@ export default function BookingManagement() {
                                                         );
                                                     })()}
                                                     {/* Hủy */}
+                                                    {b.status === "CANCELLED" && b.paymentStatus === "REFUND_PENDING" && (
+                                                        <button onClick={() => handleRefund(b._id)} className="rounded-lg p-2 text-amber-700 hover:bg-amber-50">Xác nhận đã hoàn tiền</button>
+                                                    )}
                                                     {!["CANCELLED", "COMPLETED"].includes(b.status) && (
                                                         <button
                                                             onClick={() => setCancelTarget(b)}

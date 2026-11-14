@@ -1,6 +1,6 @@
 // src/features/court/pages/CourtDetail.jsx
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { courtService } from "@/services/court.service";
 import { useAuthStore } from "@/store/authStore";
 import CourtBookingModal from "@/components/CourtBookingModal";
@@ -14,9 +14,14 @@ export default function CourtDetail() {
     const [court, setCourt] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [loadedKey, setLoadedKey] = useState("");
+    const [availabilityVersion, setAvailabilityVersion] = useState(0);
+    const [bookingNotice, setBookingNotice] = useState("");
 
     // 🎯 FIX LỆCH MÚI GIỜ: Sử dụng format ngày sv-SE (YYYY-MM-DD) chuẩn múi giờ địa phương đồng bộ với Backend
-    const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" }));
+    const [searchParams, setSearchParams] = useSearchParams();
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+    const selectedDate = searchParams.get("date") || today;
 
     // 🎯 DATA THẬT: Nhận danh sách ma trận timeline từ API Backend mới
     const [subCourtsTimeline, setSubCourtsTimeline] = useState([]);
@@ -36,6 +41,18 @@ export default function CourtDetail() {
         if (!isAuthenticated) { navigate("/login"); return; }
         if (selectedSlot) setShowBookingModal(true);
     };
+    const handleSlotConflict = (slotId, message, code) => {
+        setShowBookingModal(false);
+        setSelectedSlot(null);
+        setBookingNotice(message);
+        // Disable the stale choice immediately while retrieving the authoritative schedule.
+        setSubCourtsTimeline(items => items.map(sub => ({ ...sub,
+            slots: sub.slots.map(slot => slot._id === slotId ? {
+                ...slot, isBooked: code === "SLOT_ALREADY_BOOKED", isUnavailable: true
+            } : slot)
+        })));
+        setAvailabilityVersion(version => version + 1);
+    };
 
     useEffect(() => {
         let isMounted = true;
@@ -47,6 +64,8 @@ export default function CourtDetail() {
                     const cleanCourtData = res.court?.court ? res.court.court : res.court;
                     setError("");
                     setCourt(cleanCourtData);
+                    setLoadedKey(`${id}:${selectedDate}`);
+                    setActiveImageIndex(0);
 
                     // Bốc đúng mảng ma trận sân thi đấu nhỏ
                     setSubCourtsTimeline(res.subCourtsTimeline || res.court?.subCourtsTimeline || []);
@@ -61,7 +80,7 @@ export default function CourtDetail() {
             });
 
         return () => { isMounted = false; };
-    }, [id, selectedDate]);
+    }, [id, selectedDate, availabilityVersion]);
 
     useEffect(() => {
         let mounted = true;
@@ -86,11 +105,17 @@ export default function CourtDetail() {
 
     // Hàm xử lý khi người dùng đổi ngày chơi trên bộ lịch UI
     const handleDateChange = (e) => {
+        if (!e.target.value || e.target.value === selectedDate) return;
         setIsLoading(true);
-        setSelectedDate(e.target.value);
+        setBookingNotice("");
+        setSelectedSlot(null);
+        setShowBookingModal(false);
+        const params = new URLSearchParams(searchParams);
+        params.set("date", e.target.value);
+        setSearchParams(params);
     };
 
-    if (isLoading) {
+    if (isLoading || (!error && loadedKey !== `${id}:${selectedDate}`)) {
         return (
             <div className="min-h-screen bg-background pt-16">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -137,7 +162,7 @@ export default function CourtDetail() {
             "https://images.unsplash.com/photo-1542144557-f550eeed3b6c?q=80&w=800"
         ];
 
-    const globalTimeSlots = ["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00", "18:00", "19:00", "20:00", "21:00", "22:00"];
+    const globalTimeSlots = [...new Set(subCourtsTimeline.flatMap(sub => sub.slots.map(slot => slot.startTime)))].sort();
 
     return (
         <div className="min-h-screen bg-background pt-0 font-lexend">
@@ -149,6 +174,9 @@ export default function CourtDetail() {
                         <span className="material-symbols-outlined text-[16px] text-on-surface-variant">chevron_right</span>
                         <span className="text-primary font-medium">{court.name}</span>
                     </div>
+                    {bookingNotice && <div role="alert" className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        {bookingNotice}
+                    </div>}
 
                     <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
                         <div>
@@ -267,14 +295,15 @@ export default function CourtDetail() {
 
                                     {/* ✅ Fix #3: Tính đúng giá theo slotDuration thực tế (không hardcode 1 giờ) */}
                                     {(() => {
-                                        const durationHours = (court.slotDuration || 60) / 60;
-                                        const basePrice = court.pricePerHour * durationHours;
+                                        const minutes = time => time.split(":").map(Number).reduce((hour, minute) => hour * 60 + minute);
+                                        const durationHours = selectedSlot ? (minutes(selectedSlot.endTime) - minutes(selectedSlot.time)) / 60 : (court.slotDuration || 60) / 60;
+                                        const basePrice = Math.round(court.pricePerHour * durationHours);
                                         const fee = Math.round(basePrice * 0.05);
                                         const total = basePrice + fee;
                                         return (
                                             <div className="space-y-2.5 pt-2 text-xs font-semibold text-on-surface-variant">
                                                 <div className="flex justify-between">
-                                                    <span>Tiền thuê sân ({court.slotDuration || 60} phút)</span>
+                                                    <span>Tiền thuê sân ({durationHours * 60} phút)</span>
                                                     <span>{basePrice.toLocaleString("vi-VN")}đ</span>
                                                 </div>
                                                 <div className="flex justify-between">
@@ -282,7 +311,7 @@ export default function CourtDetail() {
                                                     <span>{fee.toLocaleString("vi-VN")}đ</span>
                                                 </div>
                                                 <div className="flex justify-between font-black text-sm pt-4 border-t border-dashed border-outline-variant text-on-surface">
-                                                    <span>Tổng chi phí trả trước</span>
+                                                    <span>Tổng chi phí thanh toán tại sân</span>
                                                     <span>{selectedSlot ? total.toLocaleString("vi-VN") : 0}đ</span>
                                                 </div>
                                             </div>
@@ -299,7 +328,7 @@ export default function CourtDetail() {
                                         <span className="material-symbols-outlined text-[20px]">calendar_checked</span>
                                         {selectedSlot ? `Tiến Hành Đặt Lịch` : "Vui lòng chọn Sân & Giờ trống"}
                                     </button>
-                                    <p className="text-center text-[10px] text-outline font-medium">Hỗ trợ thanh toán bảo mật bằng ví điện tử Momo / VNPAY.</p>
+                                    <p className="text-center text-[10px] text-outline font-medium">Thanh toán tại sân sau khi lịch được xác nhận.</p>
                                 </div>
                             </div>
                         </div>
@@ -326,6 +355,7 @@ export default function CourtDetail() {
                             <div className="relative w-full sm:w-60 shrink-0">
                                 <input
                                     type="date"
+                                    min={today}
                                     value={selectedDate}
                                     onChange={handleDateChange}
                                     className="w-full px-4 py-2.5 bg-zinc-50 rounded-xl border border-zinc-200 focus:outline-none focus:border-primary font-bold text-sm text-zinc-800 cursor-pointer shadow-sm focus:ring-4 focus:ring-primary/5"
@@ -375,17 +405,18 @@ export default function CourtDetail() {
                                                                     <div className="w-full h-9 rounded-lg bg-zinc-200/30 text-zinc-400/70 text-[10px] font-bold flex items-center justify-center cursor-not-allowed">Đã qua</div>
                                                                 ) : matchedSlot?.isMaintenance ? (
                                                                     <div className="w-full h-9 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/60 text-[10px] font-bold flex items-center justify-center cursor-not-allowed">Bảo trì</div>
-                                                                ) : isBooked ? (
-                                                                    <div className="w-full h-9 rounded-lg bg-zinc-100 text-zinc-400/80 text-[10px] font-bold flex items-center justify-center cursor-not-allowed">Kín</div>
+                                                                ) : isBooked || matchedSlot?.isUnavailable ? (
+                                                                    <button type="button" disabled aria-label={`${subCourt.name}, ${time}: ${isBooked && matchedSlot ? "Đã có người đặt" : "Không khả dụng"}`} className="w-full h-9 rounded-lg bg-zinc-100 text-zinc-400/80 text-[10px] font-bold flex items-center justify-center cursor-not-allowed">{isBooked && matchedSlot ? "Đã đặt" : "—"}</button>
                                                                 ) : (
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => setSelectedSlot({
+                                                                        aria-label={`${subCourt.name}, ${time}: Trống`}
+                                                                        onClick={() => { setBookingNotice(""); setSelectedSlot({
                                                                             slotId: matchedSlot._id,
                                                                             courtName: subCourt.name,
                                                                             time: matchedSlot.startTime,
                                                                             endTime: matchedSlot.endTime
-                                                                        })}
+                                                                        }); }}
                                                                         className={`w-full h-9 rounded-lg text-[11px] font-bold transition-all flex flex-col items-center justify-center ${
                                                                             isSelected
                                                                                 ? "bg-primary text-white shadow-sm scale-95"
@@ -470,6 +501,7 @@ export default function CourtDetail() {
             {showBookingModal && selectedSlot && <CourtBookingModal
                 court={court} slot={selectedSlot} date={selectedDate}
                 onClose={() => { setShowBookingModal(false); setSelectedSlot(null); }}
+                onSlotConflict={handleSlotConflict}
                 onBooked={slotId => setSubCourtsTimeline(items => items.map(sub => ({ ...sub,
                     slots: sub.slots.map(slot => slot._id === slotId ? { ...slot, isBooked: true } : slot)
                 })))}

@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import FavoriteButton from "@/components/FavoriteButton";
 
-export default function CourtCard({ court }) {
+export default function CourtCard({ court, date }) {
     const imageUrl = court.images?.[0]?.imageUrl || "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200";
 
     return (
@@ -62,7 +62,7 @@ export default function CourtCard({ court }) {
                         </p>
                     </div>
                     <Link
-                        to={`/courts/${court._id}`}
+                        to={`/courts/${court._id}${date ? `?date=${encodeURIComponent(date)}` : ""}`}
                         className="group/btn inline-flex items-center justify-center rounded-lg bg-zinc-900 px-3.5 py-2.5 text-xs font-bold text-white transition-all duration-200 hover:bg-primary active:scale-[0.98]"
                     >
                         Chi tiết

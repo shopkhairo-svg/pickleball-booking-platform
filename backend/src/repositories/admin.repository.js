@@ -173,7 +173,7 @@ class AdminRepository {
     async getDashboardCounts() {
         const [totalCourts, totalBookings, totalUsers, totalVendors, totalEquipments] = await Promise.all([
             Court.countDocuments({ status: { $ne: "HIDDEN" } }),
-            Booking.countDocuments(),
+            Booking.countDocuments({ reservationState: { $nin: ["PREPARING", "FAILED"] } }),
             User.countDocuments({ role: "USER" }),
             User.countDocuments({ role: "VENDOR" }),
             Equipment.countDocuments()
@@ -188,6 +188,7 @@ class AdminRepository {
         return await Booking.aggregate([
             {
                 $match: {
+                    paymentStatus: "PAID",
                     status: { $in: ["CONFIRMED", "COMPLETED"] },
                     bookingDate: { $gte: startDate, $lte: endDate }
                 }
@@ -212,6 +213,7 @@ class AdminRepository {
         const result = await Booking.aggregate([
             {
                 $match: {
+                    paymentStatus: "PAID",
                     status: { $in: ["CONFIRMED", "COMPLETED"] }
                 }
             },
@@ -324,6 +326,7 @@ class AdminRepository {
      */
     async getBookingStatusStats() {
         return await Booking.aggregate([
+            { $match: { reservationState: { $nin: ["PREPARING", "FAILED"] } } },
             {
                 $group: {
                     _id: "$status",

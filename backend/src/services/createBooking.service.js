@@ -6,15 +6,33 @@ import SubCourt from "../models/subCourt.model.js";
 import Court from "../models/court.model.js";
 import notificationService from "./notification.service.js";
 
+const summary = booking => ({ message: "Đặt sân thành công, đang chờ xác nhận. Thanh toán tại sân.", bookingId: booking._id, bookingCode: booking.bookingCode, totalPrice: booking.totalPrice, courtPrice: booking.courtPrice, equipmentPrice: 0, discount: 0, pointsUsed: 0 });
+const slotConflict = (alreadyBooked = false) => Object.assign(new Error(alreadyBooked
+    ? "Ô giờ này đã có người đặt. Vui lòng chọn ô giờ khác."
+    : "Ô giờ không còn khả dụng hoặc lịch sân đã thay đổi. Vui lòng chọn lại."), {
+    status: 409, code: alreadyBooked ? "SLOT_ALREADY_BOOKED" : "SLOT_UNAVAILABLE"
+});
+const replay = (booking, slotId) => {
+    if (String(booking.slotId) !== String(slotId)) throw Object.assign(new Error("Mã yêu cầu đã được dùng cho ô giờ khác."), { status: 409 });
+    if (booking.reservationState === "FAILED") throw Object.assign(new Error("Yêu cầu giữ chỗ đã thất bại hoặc hết hạn. Vui lòng thử lại."), { status: 409, code: "RESERVATION_FAILED" });
+    if (booking.reservationState !== "COMMITTED" || booking.status === "CANCELLED") throw Object.assign(new Error("Yêu cầu giữ chỗ đang xử lý hoặc đã hết hạn. Vui lòng kiểm tra lịch sử đặt sân."), { status: 409 });
+    return summary(booking);
+};
+
 export async function createCoreBooking(userId, payload) {
-    const { slotId, equipments = [], paymentMethod = "CASH", note = "", couponCode, pointsToUse } = payload;
+    const { slotId, equipments = [], paymentMethod = "CASH", note = "", couponCode, pointsToUse, requestKey } = payload;
     if (!mongoose.isValidObjectId(slotId)) throw new Error("Ô giờ không hợp lệ.");
     if (!Array.isArray(equipments) || equipments.length || couponCode || Number(pointsToUse || 0) !== 0 || paymentMethod !== "CASH") {
         throw Object.assign(new Error("Thuê dụng cụ, ưu đãi và thanh toán online đang phát triển. Vui lòng chọn thanh toán tại sân."), { status: 501 });
     }
     if (typeof note !== "string" || note.length > 1000) throw new Error("Ghi chú tối đa 1000 ký tự.");
+    if (requestKey !== undefined && (typeof requestKey !== "string" || !/^[a-zA-Z0-9_-]{16,100}$/.test(requestKey))) throw new Error("Mã yêu cầu đặt sân không hợp lệ.");
+    if (requestKey) {
+        const existing = await Booking.findOne({ userId, requestKey });
+        if (existing) return replay(existing, slotId);
+    }
     const candidate = await CourtSlot.findById(slotId);
-    if (!candidate) throw new Error("Khung giờ không tồn tại.");
+    if (!candidate) throw slotConflict();
     const startsAt = new Date(`${candidate.date}T${candidate.startTime}:00+07:00`);
     const endsAt = new Date(`${candidate.date}T${candidate.endTime}:00+07:00`);
     const durationHours = (endsAt - startsAt) / 3600000;
@@ -24,25 +42,46 @@ export async function createCoreBooking(userId, payload) {
     if (!Number.isFinite(court.pricePerHour) || court.pricePerHour < 0) throw new Error("Giá sân chưa được cấu hình hợp lệ.");
 
     const bookingId = new mongoose.Types.ObjectId();
-    const slot = await CourtSlot.findOneAndUpdate({ _id: slotId, isBooked: false, startTime: candidate.startTime, endTime: candidate.endTime, date: candidate.date }, {
-        $set: { isBooked: true, bookingId }
-    }, { new: true });
-    if (!slot) throw Object.assign(new Error("Ô giờ vừa được đặt. Vui lòng chọn ô giờ khác."), { status: 409 });
     let booking;
     try {
         const courtPrice = Math.round(court.pricePerHour * durationHours);
         const systemFee = Math.round(courtPrice * 0.05);
         booking = await Booking.create({
             _id: bookingId, bookingCode: `BK-${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`,
-            userId, slotId: slot._id, courtId: court._id, bookingDate: slot.date,
-            startTime: slot.startTime, endTime: slot.endTime, startsAt, durationHours,
+            userId, slotId: candidate._id, courtId: court._id, bookingDate: candidate.date,
+            startTime: candidate.startTime, endTime: candidate.endTime, startsAt, durationHours,
             courtPrice, systemFee, totalPrice: courtPrice + systemFee,
-            paymentMethod: "CASH", paymentStatus: "UNPAID", status: "PENDING", note: note.trim()
+            paymentMethod: "CASH", paymentStatus: "UNPAID", status: "PENDING", note: note.trim(),
+            reservationState: "PREPARING", reservationExpiresAt: new Date(Date.now() + 2 * 60000),
+            ...(requestKey ? { requestKey } : {})
         });
     } catch (error) {
-        // A database timeout may be an ambiguous successful insert. Never unlock a persisted booking.
-        const persisted = await Booking.exists({ _id: bookingId });
-        if (!persisted) await CourtSlot.updateOne({ _id: slotId, bookingId }, { $set: { isBooked: false, bookingId: null } });
+        if (error.code === 11000 && requestKey) {
+            const existing = await Booking.findOne({ userId, requestKey });
+            if (existing) return replay(existing, slotId);
+        }
+        throw error;
+    }
+    try {
+        const slot = await CourtSlot.findOneAndUpdate({ _id: slotId, isBooked: false, startTime: candidate.startTime, endTime: candidate.endTime, date: candidate.date }, {
+            $set: { isBooked: true, bookingId }
+        }, { returnDocument: "after" });
+        if (!slot) {
+            const currentSlot = await CourtSlot.findById(slotId).select("isBooked").lean();
+            throw slotConflict(Boolean(currentSlot?.isBooked));
+        }
+        const committed = await Booking.findOneAndUpdate({ _id: bookingId, reservationState: "PREPARING", reservationExpiresAt: { $gt: new Date() } }, {
+            $set: { reservationState: "COMMITTED" }, $unset: { reservationExpiresAt: 1 }
+        }, { returnDocument: "after" });
+        if (!committed) throw Object.assign(new Error("Yêu cầu giữ chỗ đã hết hạn. Vui lòng thử lại."), { status: 409 });
+        booking = committed;
+    } catch (error) {
+        // Resolve ambiguous successful writes before releasing anything.
+        const persisted = await Booking.findById(bookingId);
+        if (persisted?.reservationState === "COMMITTED") return summary(persisted);
+        const failed = await Booking.updateOne({ _id: bookingId, reservationState: "PREPARING" }, { $set: { reservationState: "FAILED", status: "CANCELLED" } });
+        await CourtSlot.updateOne({ _id: slotId, bookingId }, { $set: { isBooked: false, bookingId: null } });
+        if (!["SLOT_ALREADY_BOOKED", "SLOT_UNAVAILABLE"].includes(error.code) && (failed.matchedCount || persisted?.reservationState === "FAILED")) error.code = "RESERVATION_FAILED";
         throw error;
     }
     // Notification failures must not turn a committed reservation into a free slot.
@@ -53,5 +92,5 @@ export async function createCoreBooking(userId, payload) {
         ...(court.vendorId ? [notificationService.createForUser({ ...notification, userId: court.vendorId })] : [])
     ]);
     results.forEach(result => { if (result.status === "rejected") console.error("[Booking] Notification failed:", result.reason?.message); });
-    return { message: "Đặt sân thành công, đang chờ xác nhận. Thanh toán tại sân.", bookingId: booking._id, bookingCode: booking.bookingCode, totalPrice: booking.totalPrice, courtPrice: booking.courtPrice, equipmentPrice: 0, discount: 0, pointsUsed: 0 };
+    return summary(booking);
 }

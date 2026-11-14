@@ -18,13 +18,17 @@ class UserService {
         const { fullName, phone } = updatePayload;
         const updateData = {};
 
-        if (fullName) {
-            if (fullName.trim().length < 2) throw new Error("Họ và tên phải từ 2 ký tự trở lên!");
+        if (fullName !== undefined) {
+            if (typeof fullName !== "string" || fullName.trim().length < 2 || fullName.trim().length > 100) {
+                throw new Error("Họ và tên phải có từ 2 đến 100 ký tự!");
+            }
             updateData.fullName = fullName.trim();
         }
 
         if (phone !== undefined) {
-            updateData.phone = phone.trim() || null;
+            if (phone !== null && typeof phone !== "string") throw new Error("Số điện thoại không hợp lệ!");
+            if (phone && !/^[+\d\s().-]{7,20}$/.test(phone.trim())) throw new Error("Số điện thoại không hợp lệ!");
+            updateData.phone = phone?.trim() || null;
         }
 
         // 🎯 NẾU CÓ FILE ẢNH ĐƯỢC TẢI LÊN: Multer Storage đã đẩy lên mây và găm link vào file.path

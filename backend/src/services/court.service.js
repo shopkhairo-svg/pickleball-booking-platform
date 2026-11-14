@@ -1,80 +1,71 @@
+import mongoose from "mongoose";
+import { parseCoordinates, distanceKm, coordinateBounds } from "../utils/coordinates.js";
 import { buildCourtFilters } from "../utils/courtFilters.js";
+import { courtDate, futureSlotFilter, queryNumber, vietnamDate } from "../utils/courtQuery.js";
 import courtRepository from "../repositories/court.repository.js";
 import SubCourt from "../models/subCourt.model.js";
 import CourtSlot from "../models/courtSlot.model.js";
 
-class CourtService {
-    /**
-     * Logic nghiệp vụ xử lý bộ lọc nâng cao cho trang chủ & trang danh sách
-     */
-    async getCourtsListing(queryParams) {
-        const { filter, limit: parsedLimit, page: parsedPage, skip } = buildCourtFilters(queryParams);
-        const { courts, total } = await courtRepository.findAndCount(filter, skip, parsedLimit);
+const pagination = (total, page, limit) => ({ totalItems: total, currentPage: page, totalPages: Math.ceil(total / limit), limit });
 
-        return {
-            courts,
-            pagination: {
-                totalItems: total,
-                currentPage: parsedPage,
-                totalPages: Math.ceil(total / parsedLimit),
-                limit: parsedLimit
-            }
-        };
+// Filter before pagination so fully booked courts never consume a result page.
+async function availableCourtIds(date, ids) {
+    const slotFilter = futureSlotFilter(date);
+    if (!slotFilter || (ids && ids.length === 0)) return [];
+    const subs = await SubCourt.find({ status: "AVAILABLE", ...(ids ? { courtId: { $in: ids } } : {}) }).select("_id").lean();
+    return CourtSlot.distinct("courtId", { ...slotFilter, subCourtId: { $in: subs.map(sub => sub._id) }, ...(ids ? { courtId: { $in: ids } } : {}) });
+}
+
+class CourtService {
+    async getCourtsListing(queryParams) {
+        const { filter, limit, page, skip, date } = buildCourtFilters(queryParams);
+        if (date) filter._id = { $in: await availableCourtIds(date) };
+        const { courts, total } = await courtRepository.findAndCount(filter, skip, limit);
+        return { courts, ...(date ? { targetDate: date } : {}), pagination: pagination(total, page, limit) };
     }
 
-    /**
-     * Logic nghiệp vụ lấy thông tin chi tiết một cụm sân
-     */
     async getCourtDetail(courtId, dateQuery) {
-        if (!courtId) throw new Error("Thiếu thông tin mã ID cụm sân!");
-
-        // 1. Lấy thông tin cơ bản của cụm sân lớn
+        if (!mongoose.isObjectIdOrHexString(courtId)) throw new Error("Mã sân không hợp lệ.");
+        const targetDate = courtDate(dateQuery, vietnamDate());
         const court = await courtRepository.findById(courtId);
-        if (!court || court.status === "HIDDEN") {
-            throw new Error("Cụm sân này không tồn tại hoặc đã bị tạm ẩn!");
+        if (!court || court.status === "HIDDEN") throw new Error("Cụm sân này không tồn tại hoặc đã bị tạm ẩn!");
+        const [subCourts, slots] = await Promise.all([
+            SubCourt.find({ courtId, status: { $ne: "HIDDEN" } }).sort({ name: 1, _id: 1 }).lean(),
+            CourtSlot.find({ courtId, date: targetDate }).select("-bookingId").sort({ startTime: 1 }).lean()
+        ]);
+        const now = new Date();
+        const slotsBySub = new Map();
+        for (const slot of slots) {
+            const key = String(slot.subCourtId);
+            if (!slotsBySub.has(key)) slotsBySub.set(key, []);
+            slotsBySub.get(key).push(slot);
         }
+        const subCourtsTimeline = subCourts.map(sub => ({
+            _id: sub._id, name: sub.name, status: sub.status,
+            slots: (slotsBySub.get(String(sub._id)) || []).map(slot => ({
+                ...slot,
+                isPast: new Date(`${slot.date}T${slot.startTime}:00+07:00`) <= now,
+                isMaintenance: sub.status !== "AVAILABLE" || court.status !== "AVAILABLE"
+            }))
+        }));
+        return { court, targetDate, subCourtsTimeline };
+    }
 
-        const targetDate = dateQuery || new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
-        if (typeof targetDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(targetDate) || !Number.isFinite(Date.parse(targetDate)) || new Date(targetDate).toISOString().slice(0, 10) !== targetDate) throw new Error("Ngày tìm sân không hợp lệ.");
-
-        // 2. Lấy danh sách tất cả các sân nhỏ thuộc cụm này (bao gồm cả sân đang bảo trì, chỉ ẩn sân HIDDEN)
-        const subCourts = await SubCourt.find({ courtId, status: { $ne: "HIDDEN" } });
-
-        // 3. Lấy tất cả các ô giờ đã tạo của cụm này trong ngày được chọn
-        const slots = await CourtSlot.find({ courtId, date: targetDate });
-
-        const nowStr = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
-
-        // 🎯 THUẬT TOÁN ĐỒNG BỘ: Gom nhóm (Group) các ô giờ thật lồng vào từng Sân nhỏ tương ứng
-        const timelineMatrix = subCourts.map(sub => {
-            // Lọc ra các slot thuộc về cái sân nhỏ này
-            const subCourtSlots = slots
-                .filter(slot => slot.subCourtId.toString() === sub._id.toString())
-                .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                .map(slot => {
-                    const slotObj = slot.toObject();
-                    const slotDateTimeStr = `${slot.date} ${slot.startTime}:00`;
-                    if (slotDateTimeStr < nowStr) {
-                        slotObj.isPast = true; // Đánh dấu ô giờ đã trôi qua
-                    }
-                    if (sub.status === "MAINTENANCE" || court.status !== "AVAILABLE") {
-                        slotObj.isMaintenance = true; // Đánh dấu ô giờ đang bảo trì
-                    }
-                    return slotObj;
-                });
-
-            return {
-                _id: sub._id,
-                name: sub.name,
-                status: sub.status,
-                slots: subCourtSlots // Mảng các ô giờ thật chạy theo thời gian thực!
-            };
-        });
-
+    async getNearbyCourts(query) {
+        const { latitude, longitude } = parseCoordinates({ latitude: query.lat, longitude: query.lng });
+        if (latitude == null || longitude == null) throw new Error("Vui lòng cung cấp vĩ độ và kinh độ.");
+        const radius = queryNumber(query.radius, { fallback: 5, min: Number.EPSILON, max: 100 });
+        const date = courtDate(query.date, vietnamDate());
+        const { filter, page, limit, skip } = buildCourtFilters(query);
+        const courts = await courtRepository.findWithCoordinates(filter, coordinateBounds(latitude, longitude, radius));
+        const within = courts.map(court => ({ ...court, distanceKm: distanceKm(latitude, longitude, court.latitude, court.longitude) }))
+            .filter(court => court.distanceKm <= radius)
+            .sort((a, b) => a.distanceKm - b.distanceKm || String(a._id).localeCompare(String(b._id)));
+        const availableIds = new Set((await availableCourtIds(date, within.map(court => court._id))).map(String));
+        const available = within.filter(court => availableIds.has(String(court._id)));
         return {
-            court,
-            targetDate,
-            subCourtsTimeline: timelineMatrix
+            courts: available.slice(skip, skip + limit).map(court => ({ ...court, distanceKm: Math.round(court.distanceKm * 100) / 100 })),
+            targetDate: date, radius, pagination: pagination(available.length, page, limit)
         };
     }
 }

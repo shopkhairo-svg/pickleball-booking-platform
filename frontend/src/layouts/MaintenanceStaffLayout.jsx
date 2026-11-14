@@ -19,7 +19,7 @@ export default function MaintenanceStaffLayout() {
     const menuItems = [
         {
             path: "/maintenance-staff",
-            label: "Công việc bảo trì",
+            label: "Bảo trì · Đang phát triển",
             icon: "construction",
         },
         {
@@ -113,7 +113,7 @@ export default function MaintenanceStaffLayout() {
                         <span className="material-symbols-outlined text-[24px] text-zinc-500">menu</span>
                     </button>
                     <div className="flex items-center gap-2">
-                        <span className="hidden text-xs text-zinc-400 sm:block">Ca bảo trì hôm nay,</span>
+                        <span className="hidden text-xs text-zinc-400 sm:block">Chào bạn,</span>
                         <span className="text-xs font-bold text-primary">{user?.fullName || "Thợ bảo trì"}</span>
                     </div>
                     <div className="flex items-center gap-3">

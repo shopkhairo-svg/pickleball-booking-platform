@@ -17,6 +17,8 @@
   },
   "homepage": "https://github.com/shopkhairo-svg/pickleball-booking-platform#readme",
   "devDependencies": {
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.3"
   }

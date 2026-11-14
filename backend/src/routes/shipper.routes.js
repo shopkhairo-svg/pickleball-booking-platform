@@ -1,19 +1,7 @@
 import express from "express";
-import shipperController from "../controllers/shipper.controller.js";
-import { verifyToken, requireShipper } from "../middlewares/auth.middleware.js";
-import { globalLimiter } from "../middlewares/rateLimiter.middleware.js";
-import { uploadDeliveryProofCloud } from "../config/cloudinary.js";
+import { inDevelopment } from "../middlewares/development.middleware.js";
 
+// Intentionally inactive: no business controllers, uploads or database calls.
 const router = express.Router();
-
-router.use(globalLimiter, verifyToken, requireShipper);
-
-router.get("/deliveries", shipperController.getMyDeliveries);
-router.get("/deliveries/:id", shipperController.getDeliveryDetail);
-router.put(
-    "/deliveries/:id/status",
-    uploadDeliveryProofCloud.single("proofImage"),
-    shipperController.updateDeliveryStatus
-);
-
+router.use(inDevelopment);
 export default router;

@@ -4,6 +4,17 @@ import { useSearchParams } from "react-router-dom";
 import { courtService } from "@/services/court.service";
 import CourtCard from "@/components/CourtCard";
 import SkeletonCard from "@/components/SkeletonCard";
+import LocationAutocomplete from "@/components/LocationAutocomplete";
+import { applyLocationDraft, applyLocationSelection } from "@/utils/locationSuggestions";
+
+function useFilterDraft(appliedValue) {
+    const [draft, setDraft] = useState(appliedValue);
+    useEffect(() => {
+        const timer = window.setTimeout(() => setDraft(appliedValue), 0);
+        return () => window.clearTimeout(timer);
+    }, [appliedValue]);
+    return [draft, setDraft];
+}
 
 export default function CourtList() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -12,43 +23,25 @@ export default function CourtList() {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [nearby, setNearby] = useState(null);
+    const [radius, setRadius] = useState("5");
+    const selectedDate = searchParams.get("date") || "";
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh" });
+    const [locating, setLocating] = useState(false);
 
-    // State cục bộ cho form (chưa áp dụng)
-    const [localSearch, setLocalSearch] = useState(searchParams.get("search") || "");
-    const [localLocation, setLocalLocation] = useState(searchParams.get("location") || "");
-    const [localMinPrice, setLocalMinPrice] = useState(searchParams.get("minPrice") || "");
-    const [localMaxPrice, setLocalMaxPrice] = useState(searchParams.get("maxPrice") || "");
-
-    // State đã được áp dụng (dùng để hiển thị chip)
-    const [appliedSearch, setAppliedSearch] = useState(searchParams.get("search") || "");
-    const [appliedLocation, setAppliedLocation] = useState(searchParams.get("location") || "");
-    const [appliedMinPrice, setAppliedMinPrice] = useState(searchParams.get("minPrice") || "");
-    const [appliedMaxPrice, setAppliedMaxPrice] = useState(searchParams.get("maxPrice") || "");
+    // Each draft follows only its own URL value: changing type/date/page must
+    // not erase a location or price that the user is still typing.
+    const appliedSearch = searchParams.get("search") || "";
+    const appliedLocation = searchParams.get("location") || "";
+    const appliedMinPrice = searchParams.get("minPrice") || "";
+    const appliedMaxPrice = searchParams.get("maxPrice") || "";
+    const [localSearch, setLocalSearch] = useFilterDraft(appliedSearch);
+    const [localLocation, setLocalLocation] = useFilterDraft(appliedLocation);
+    const [localMinPrice, setLocalMinPrice] = useFilterDraft(appliedMinPrice);
+    const [localMaxPrice, setLocalMaxPrice] = useFilterDraft(appliedMaxPrice);
 
     const type = searchParams.get("type") || "";
     const page = searchParams.get("page") || "1";
-
-    // Đồng bộ state cục bộ khi URL thay đổi từ bên ngoài
-    useEffect(() => {
-        const timer = window.setTimeout(() => {
-            const newSearch = searchParams.get("search") || "";
-            const newLocation = searchParams.get("location") || "";
-            const newMinPrice = searchParams.get("minPrice") || "";
-            const newMaxPrice = searchParams.get("maxPrice") || "";
-
-            setLocalSearch(newSearch);
-            setLocalLocation(newLocation);
-            setLocalMinPrice(newMinPrice);
-            setLocalMaxPrice(newMaxPrice);
-
-            setAppliedSearch(newSearch);
-            setAppliedLocation(newLocation);
-            setAppliedMinPrice(newMinPrice);
-            setAppliedMaxPrice(newMaxPrice);
-        }, 0);
-
-        return () => window.clearTimeout(timer);
-    }, [searchParams]);
 
     // Gọi API khi URL thay đổi
     useEffect(() => {
@@ -60,7 +53,10 @@ export default function CourtList() {
             const params = Object.fromEntries([...searchParams]);
             if (!params.page) params.page = "1";
 
-            courtService.getCourts(params)
+            const request = nearby
+                ? courtService.getNearbyCourts({ ...params, ...nearby, radius })
+                : courtService.getCourts(params);
+            request
                 .then(res => {
                     if (res.success && isMounted) {
                         setCourts(res.courts);
@@ -81,7 +77,7 @@ export default function CourtList() {
             isMounted = false;
             window.clearTimeout(timer);
         };
-    }, [searchParams]);
+    }, [searchParams, nearby, radius]);
 
     // Cập nhật filter dạng click (type, page) - Áp dụng ngay
     const updateFilter = (key, value) => {
@@ -96,20 +92,24 @@ export default function CourtList() {
     };
 
     // Áp dụng bộ lọc từ sidebar
+    const handleSelectLocation = suggestion => {
+        setLocalLocation(suggestion.value);
+        setNearby(null);
+        setSearchParams(applyLocationSelection(searchParams, suggestion));
+        setIsFilterOpen(false);
+    };
+
     const handleApplyFilters = (e) => {
         e.preventDefault();
         if (localMinPrice !== "" && localMaxPrice !== "" && Number(localMinPrice) > Number(localMaxPrice)) {
             setError("Giá tối thiểu không được lớn hơn giá tối đa.");
             return;
         }
-        const newParams = new URLSearchParams(searchParams);
-        newParams.set("page", "1");
+        const newParams = applyLocationDraft(searchParams, localLocation);
+        if (localLocation.trim() !== appliedLocation) setNearby(null);
 
         if (localSearch.trim()) newParams.set("search", localSearch.trim());
         else newParams.delete("search");
-
-        if (localLocation.trim()) newParams.set("location", localLocation.trim());
-        else newParams.delete("location");
 
         if (localMinPrice) newParams.set("minPrice", localMinPrice);
         else newParams.delete("minPrice");
@@ -120,24 +120,16 @@ export default function CourtList() {
         setSearchParams(newParams);
         setIsFilterOpen(false);
 
-        // Cập nhật applied state
-        setAppliedSearch(localSearch.trim());
-        setAppliedLocation(localLocation.trim());
-        setAppliedMinPrice(localMinPrice);
-        setAppliedMaxPrice(localMaxPrice);
     };
 
     // Reset tất cả bộ lọc
     const handleResetAll = () => {
+        setNearby(null);
         setSearchParams({});
         setLocalSearch("");
         setLocalLocation("");
         setLocalMinPrice("");
         setLocalMaxPrice("");
-        setAppliedSearch("");
-        setAppliedLocation("");
-        setAppliedMinPrice("");
-        setAppliedMaxPrice("");
     };
 
     // Xóa một filter cụ thể
@@ -145,6 +137,7 @@ export default function CourtList() {
         const newParams = new URLSearchParams(searchParams);
         newParams.set("page", "1");
         newParams.delete(filterName);
+        if (filterName === "location") newParams.delete("locationId");
         setSearchParams(newParams);
 
         if (filterName === "search") setLocalSearch("");
@@ -154,7 +147,17 @@ export default function CourtList() {
         if (filterName === "maxPrice") setLocalMaxPrice("");
     };
 
-    const hasActiveFilters = appliedSearch || appliedLocation || type || appliedMinPrice || appliedMaxPrice;
+    const hasActiveFilters = appliedSearch || appliedLocation || type || appliedMinPrice || appliedMaxPrice || selectedDate;
+
+    const findNearby = () => {
+        if (!navigator.geolocation) { setError("Trình duyệt không hỗ trợ xác định vị trí."); return; }
+        setLocating(true); setError("");
+        navigator.geolocation.getCurrentPosition(position => {
+            setNearby({ lat: position.coords.latitude, lng: position.coords.longitude });
+            setSearchParams(previous => { const params = new URLSearchParams(previous); params.set("page", "1"); return params; });
+            setLocating(false);
+        }, () => { setError("Không lấy được vị trí. Hãy cấp quyền vị trí hoặc tìm theo khu vực."); setLocating(false); }, { timeout: 10000 });
+    };
 
     return (
         <div className="min-h-screen bg-background">
@@ -226,16 +229,15 @@ export default function CourtList() {
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-xs font-bold text-zinc-500 flex items-center gap-1 uppercase tracking-wider">
+                                    <label htmlFor="court-location" className="text-xs font-bold text-zinc-500 flex items-center gap-1 uppercase tracking-wider">
                                         <span className="material-symbols-outlined text-[16px]">location_on</span>
-                                        Khu vực / Quận huyện
+                                        Khu vực
                                     </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ví dụ: Thủ Đức, Quận 7..."
+                                    <LocationAutocomplete
+                                        id="court-location"
                                         value={localLocation}
-                                        onChange={(e) => setLocalLocation(e.target.value)}
-                                        className="field-control"
+                                        onChange={setLocalLocation}
+                                        onSelect={handleSelectLocation}
                                     />
                                 </div>
 
@@ -312,9 +314,28 @@ export default function CourtList() {
                     </aside>
 
                     <main className="flex-1 space-y-6">
+                        <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-white p-4">
+                            <button type="button" onClick={nearby ? () => { setNearby(null); updateFilter("page", "1"); } : findNearby} disabled={locating} className="btn-secondary px-4 py-2 text-sm">
+                                {locating ? "Đang lấy vị trí…" : nearby ? "Tắt tìm gần đây" : "Tìm sân gần tôi"}
+                            </button>
+                            {nearby && <>
+                                <label className="text-sm">Bán kính
+                                    <select value={radius} onChange={e => { setRadius(e.target.value); updateFilter("page", "1"); }} className="ml-2 rounded-lg border p-2">
+                                        {[2, 5, 10, 20, 50, 100].map(value => <option value={value} key={value}>{value} km</option>)}
+                                    </select>
+                                </label>
+                                <p className="text-xs text-gray-500">Chỉ hiện sân có tọa độ và còn giờ trống trong ngày chọn.</p>
+                            </>}
+                            <label className="text-sm">Ngày chơi <input type="date" min={today} value={selectedDate || (nearby ? today : "")} onChange={e => updateFilter("date", e.target.value)} className="rounded-lg border p-2" /></label>
+                            {!nearby && <p className="text-xs text-gray-500">Chọn ngày để chỉ hiện sân còn giờ trống.</p>}
+                        </div>
                         {hasActiveFilters && (
                             <div className="flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200/50 bg-zinc-50/50 p-2.5">
                                 <span className="text-xs font-bold text-zinc-500">Đang lọc:</span>
+                                {selectedDate && <span className="inline-flex items-center gap-1 rounded-lg bg-primary-container px-2 py-1 text-xs font-bold text-on-primary-container">
+                                    {selectedDate}
+                                    <button onClick={() => removeFilter("date")} aria-label="Bỏ lọc ngày" className="hover:bg-primary/20 rounded-full p-0.5"><span className="material-symbols-outlined text-[12px]">close</span></button>
+                                </span>}
                                 {appliedSearch && (
                                     <span className="inline-flex items-center gap-1 rounded-lg bg-primary-container px-2 py-1 text-xs font-bold text-on-primary-container">
                                         {appliedSearch.length > 20 ? appliedSearch.slice(0, 20) + "..." : appliedSearch}
@@ -342,7 +363,11 @@ export default function CourtList() {
                                 {(appliedMinPrice || appliedMaxPrice) && (
                                     <span className="inline-flex items-center gap-1 rounded-lg bg-primary-container px-2 py-1 text-xs font-bold text-on-primary-container">
                                         {appliedMinPrice || "0"}đ - {appliedMaxPrice || "∞"}đ
-                                        <button onClick={() => { removeFilter("minPrice"); removeFilter("maxPrice"); }} className="hover:bg-primary/20 rounded-full p-0.5">
+                                        <button onClick={() => {
+                                            const params = new URLSearchParams(searchParams);
+                                            params.delete("minPrice"); params.delete("maxPrice"); params.set("page", "1");
+                                            setLocalMinPrice(""); setLocalMaxPrice(""); setSearchParams(params);
+                                        }} className="hover:bg-primary/20 rounded-full p-0.5">
                                             <span className="material-symbols-outlined text-[12px]">close</span>
                                         </button>
                                     </span>
@@ -373,8 +398,8 @@ export default function CourtList() {
                                 <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-zinc-50 border border-zinc-100">
                                     <span className="material-symbols-outlined text-2xl text-zinc-400">search_off</span>
                                 </div>
-                                <h3 className="mb-1.5 text-base font-bold text-zinc-800">Không tìm thấy sân bóng</h3>
-                                <p className="mx-auto mb-6 max-w-sm text-xs text-zinc-400 leading-relaxed">Thử nới khoảng giá, bỏ loại sân hoặc đổi khu vực tìm kiếm.</p>
+                                <h3 className="mb-1.5 text-base font-bold text-zinc-800">Chưa có sân phù hợp</h3>
+                                <p className="mx-auto mb-6 max-w-sm text-xs text-zinc-400 leading-relaxed">Kết quả chỉ gồm sân đã đăng ký trong hệ thống. Thử mở rộng bộ lọc, đổi khu vực hoặc ngày chơi.</p>
                                 <button
                                     onClick={handleResetAll}
                                     className="btn-primary py-2.5 px-4 text-xs"
@@ -386,7 +411,7 @@ export default function CourtList() {
                             <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
                                     {courts.map(court => (
-                                        <CourtCard key={court._id} court={court} />
+                                        <div key={court._id}><CourtCard court={court} date={selectedDate || (nearby ? today : undefined)} />{nearby && <p className="mt-2 text-sm text-gray-600">Cách bạn khoảng {court.distanceKm} km</p>}</div>
                                     ))}
                                 </div>
 

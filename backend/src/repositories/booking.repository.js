@@ -16,7 +16,7 @@ class BookingRepository {
         return await Booking.findById(id);
     }
     async findByUserId(userId) {
-        return await Booking.find({ userId })
+        return await Booking.find({ userId, reservationState: { $nin: ["PREPARING", "FAILED"] } })
             .populate("courtId", "name address images") // Kéo thêm tên sân, địa chỉ, ảnh cụm sân lớn để hiển thị ở UI
             .sort({ createdAt: -1 });
     }

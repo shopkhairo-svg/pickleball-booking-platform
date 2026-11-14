@@ -1,6 +1,15 @@
 import SystemSetting from "../models/systemSetting.model.js";
 
 class SystemSettingService {
+    validateSetting(key, value) {
+        if (!["websiteInfo", "slotDaysAhead"].includes(key)) throw Object.assign(new Error("Cấu hình này đang phát triển và đã bị vô hiệu hóa."), { status: 501 });
+        if (key === "slotDaysAhead" && (!Number.isInteger(value) || value < 1 || value > 90)) throw new Error("Số ngày mở lịch phải là số nguyên từ 1 đến 90.");
+        if (key === "websiteInfo") {
+            const allowed = ["title", "contactEmail", "contactPhone", "address"];
+            if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(field => !allowed.includes(field))) throw new Error("Thông tin website không hợp lệ.");
+            for (const field of allowed) if (typeof value[field] !== "string" || value[field].length > 500) throw new Error("Thông tin website phải là chuỗi tối đa 500 ký tự.");
+        }
+    }
     async initializeSettings() {
         try {
             const defaults = [
@@ -60,6 +69,7 @@ class SystemSettingService {
     }
 
     async updateSetting(key, value) {
+        this.validateSetting(key, value);
         const setting = await SystemSetting.findOneAndUpdate(
             { key },
             { $set: { value } },

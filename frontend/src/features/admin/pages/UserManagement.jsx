@@ -1,5 +1,5 @@
 // src/features/admin/pages/UserManagement.jsx
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import adminService from "../../../services/adminService";
 
 const statusColors = {
@@ -12,19 +12,13 @@ const UserDetailModal = ({ userId, onClose }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchDetail();
+        let active = true;
+        adminService.getUserDetail(userId)
+            .then(res => { if (active) setData(res); })
+            .catch(err => console.error(err))
+            .finally(() => { if (active) setLoading(false); });
+        return () => { active = false; };
     }, [userId]);
-
-    const fetchDetail = async () => {
-        try {
-            const res = await adminService.getUserDetail(userId);
-            setData(res);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const formatMoney = (num) => num?.toLocaleString("vi-VN") + "đ";
 
@@ -119,11 +113,7 @@ export default function UserManagement() {
     const [selectedUserId, setSelectedUserId] = useState(null);
     const [filters, setFilters] = useState({ page: 1, role: "", status: "", search: "" });
 
-    useEffect(() => {
-        fetchUsers();
-    }, [filters.page, filters.role, filters.status]);
-
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
             const params = { page: filters.page, limit: 10 };
@@ -138,12 +128,16 @@ export default function UserManagement() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [filters]);
+
+    useEffect(() => {
+        const timer = setTimeout(fetchUsers, 150);
+        return () => clearTimeout(timer);
+    }, [fetchUsers]);
 
     const handleSearch = (e) => {
         e.preventDefault();
         setFilters({ ...filters, page: 1 });
-        fetchUsers();
     };
 
     const handleToggleStatus = async (id) => {
@@ -281,10 +275,10 @@ export default function UserManagement() {
                                                     className="px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer hover:bg-gray-100 transition-colors"
                                                 >
                                                     <option value="USER">USER</option>
-                                                    <option value="SHIPPER">SHIPPER (Giao hàng)</option>
-                                                    <option value="MAINTENANCE_STAFF">THỢ BẢO TRÌ</option>
+                                                    <option value="SHIPPER" disabled>Giao hàng · Đang phát triển</option>
+                                                    <option value="MAINTENANCE_STAFF" disabled>Bảo trì · Đang phát triển</option>
                                                     <option value="VENDOR_COURT">VENDOR (Chủ sân)</option>
-                                                    <option value="VENDOR_EQUIPMENT">VENDOR (Cung cấp thiết bị)</option>
+                                                    <option value="VENDOR_EQUIPMENT" disabled>Cung cấp thiết bị · Đang phát triển</option>
                                                 </select>
                                             )}
                                         </td>

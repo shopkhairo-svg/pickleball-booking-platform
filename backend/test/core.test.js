@@ -4,6 +4,7 @@ import { buildCourtFilters, searchPattern } from "../src/utils/courtFilters.js";
 import { slotTimes } from "../src/utils/slotTimes.js";
 import { reminderIsDue } from "../src/services/bookingReminder.service.js";
 import { developmentGate } from "../src/middlewares/development.middleware.js";
+import { parseCoordinates, distanceKm } from "../src/utils/coordinates.js";
 
 test("Vietnamese partial search escapes regex and matches accents", () => {
     assert.match("Sân Đà Nẵng", new RegExp(searchPattern("da nang"), "i"));
@@ -41,4 +42,12 @@ test("Deferred endpoints return an explicit 501; core endpoints continue", () =>
     for (const path of ["/auth/login", "/courts", "/bookings", "/admin/bookings/123/cash-payment", "/reviews", "/notifications"]) {
         let passed = false; developmentGate({ path }, {}, () => { passed = true; }); assert.equal(passed, true);
     }
+});
+test("Coordinates must be supplied together within geographic limits", () => {
+    assert.deepEqual(parseCoordinates({ latitude: "0", longitude: "0" }), { latitude: 0, longitude: 0 });
+    assert.deepEqual(parseCoordinates({ latitude: "", longitude: "" }), { latitude: null, longitude: null });
+    assert.throws(() => parseCoordinates({ latitude: "91", longitude: "10" }));
+    assert.throws(() => parseCoordinates({ latitude: "10", longitude: "" }));
+    assert.ok(distanceKm(10.7769, 106.7009, 10.7869, 106.7009) > 1);
+    assert.equal(distanceKm(0, 0, 0, 0), 0);
 });

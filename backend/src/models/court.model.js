@@ -17,6 +17,9 @@ const courtSchema = new mongoose.Schema({
         type: String
     },
 
+    latitude: { type: Number, min: -90, max: 90 },
+    longitude: { type: Number, min: -180, max: 180 },
+
     type: {
         type: String,
         enum: [

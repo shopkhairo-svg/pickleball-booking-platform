@@ -1,10 +1,7 @@
 import express from "express";
-import pointsController from "../controllers/points.controller.js";
-import { verifyToken } from "../middlewares/auth.middleware.js";
-import { globalLimiter } from "../middlewares/rateLimiter.middleware.js";
+import { inDevelopment } from "../middlewares/development.middleware.js";
 
+// Intentionally inactive: no business controllers, uploads or database calls.
 const router = express.Router();
-
-router.get("/wallet", globalLimiter, verifyToken, pointsController.getWallet);
-
+router.use(inDevelopment);
 export default router;

@@ -73,22 +73,17 @@ class ReviewService {
             throw new Error("Bạn chỉ có thể đánh giá sau khi đã đặt sân, thanh toán và hoàn tất lượt chơi!");
         }
 
-        // ✅ Fix #11: Tạo review với status PENDING, chờ admin duyệt trước khi public
-        const review = await Review.create({
-            userId,
-            courtId,
-            bookingId,
-            rating,
-            comment,
-            images,
-            status: "PENDING"
-        });
-
-        // updateCourtStats chỉ tính review APPROVED → stats vẫn chính xác
-        // Pending reviews do not change public rating statistics.
-
-        // ✅ Fix #11: Không cộng điểm ngay — chỉ cộng khi admin APPROVE review
-        // Điểm thưởng sẽ được cộng trong updateReviewStatus() khi status chuyển sang APPROVED
+        let review;
+        try {
+            review = await Review.create({
+                userId, courtId, bookingId, rating, comment, images, status: "PENDING"
+            });
+        } catch (error) {
+            if (error.code === 11000) {
+                throw Object.assign(new Error("Bạn đã gửi đánh giá cho lượt đặt sân này!"), { status: 409 });
+            }
+            throw error;
+        }
 
         await notificationService.createForUser({
             userId,
@@ -145,8 +140,19 @@ class ReviewService {
 
     async getAdminReviews(query = {}) {
         const filter = {};
-        if (query.status) filter.status = query.status.toUpperCase();
-        if (query.courtId) filter.courtId = query.courtId;
+        if (query.status !== undefined) {
+            const status = typeof query.status === "string" ? query.status.toUpperCase() : "";
+            if (!["PENDING", "APPROVED", "HIDDEN", "DELETED"].includes(status)) {
+                throw Object.assign(new Error("Trạng thái đánh giá không hợp lệ!"), { status: 400 });
+            }
+            filter.status = status;
+        }
+        if (query.courtId !== undefined) {
+            if (!mongoose.isObjectIdOrHexString(query.courtId)) {
+                throw Object.assign(new Error("Mã sân không hợp lệ!"), { status: 400 });
+            }
+            filter.courtId = query.courtId;
+        }
 
         const reviews = await Review.find(filter)
             .populate("userId", "fullName email avatar")
@@ -167,20 +173,19 @@ class ReviewService {
     }
 
     async updateReviewStatus(reviewId, status) {
-        const nextStatus = status?.toUpperCase();
+        const nextStatus = typeof status === "string" ? status.toUpperCase() : "";
         if (!["PENDING", "APPROVED", "HIDDEN", "DELETED"].includes(nextStatus)) {
             throw new Error("Trạng thái đánh giá không hợp lệ!");
         }
 
         const review = await Review.findById(reviewId);
-        if (!review) throw new Error("Đánh giá không tồn tại!");
+        if (!review) throw Object.assign(new Error("Đánh giá không tồn tại!"), { status: 404 });
 
         review.status = nextStatus;
         await review.save();
 
         await this.updateCourtStats(review.courtId);
 
-        // ✅ Fix #11: Cộng điểm thưởng khi admin APPROVE review lần đầu tiên (trước đó là PENDING)
         return { message: "Cập nhật trạng thái đánh giá thành công!", review };
     }
 }

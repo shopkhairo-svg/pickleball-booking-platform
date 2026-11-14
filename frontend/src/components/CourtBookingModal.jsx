@@ -2,11 +2,12 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { userService } from "@/services/user.service";
 
-export default function CourtBookingModal({ court, slot, date, onClose, onBooked }) {
+export default function CourtBookingModal({ court, slot, date, onClose, onBooked, onSlotConflict }) {
     const [note, setNote] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [booking, setBooking] = useState(null);
+    const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
     const minutes = time => time.split(":").reduce((h, m) => Number(h) * 60 + Number(m));
     const price = Math.round(court.pricePerHour * (minutes(slot.endTime) - minutes(slot.time)) / 60);
     const fee = Math.round(price * 0.05);
@@ -15,10 +16,18 @@ export default function CourtBookingModal({ court, slot, date, onClose, onBooked
         if (busy || booking) return;
         setBusy(true); setError("");
         try {
-            const result = await userService.createBooking({ slotId: slot.slotId, note, paymentMethod: "CASH" });
+            const result = await userService.createBooking({ slotId: slot.slotId, note, paymentMethod: "CASH", requestKey });
             setBooking(result);
             onBooked(slot.slotId);
-        } catch (err) { setError(err.response?.data?.message || "Không thể đặt sân. Vui lòng thử lại."); }
+        } catch (err) {
+            const code = err.response?.data?.code;
+            const message = err.response?.data?.message || "Không thể đặt sân. Vui lòng thử lại.";
+            if (err.response?.status === 409 && ["SLOT_ALREADY_BOOKED", "SLOT_UNAVAILABLE"].includes(code)) {
+                onSlotConflict?.(slot.slotId, message, code);
+            }
+            if (err.response?.data?.code === "RESERVATION_FAILED") setRequestKey(crypto.randomUUID());
+            setError(message);
+        }
         finally { setBusy(false); }
     };
     return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
