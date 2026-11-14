@@ -9,6 +9,9 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 
+# Generated local demo login credentials
+backend/.demo-credentials.json
+
 # Test reports and caches
 /test-results/
 /playwright-report/

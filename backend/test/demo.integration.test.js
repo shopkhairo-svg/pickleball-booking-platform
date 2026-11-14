@@ -1,0 +1,70 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { randomUUID, randomBytes } from "node:crypto";
+import mongoose from "mongoose";
+import bcrypt from "bcryptjs";
+import Court from "../src/models/court.model.js";
+import CourtSlot from "../src/models/courtSlot.model.js";
+import SubCourt from "../src/models/subCourt.model.js";
+import User from "../src/models/user.model.js";
+import Booking from "../src/models/booking.model.js";
+import { seedDemoData } from "../src/demo/seedDemoData.js";
+import { DEMO_CENTER, DEMO_COURTS, DEMO_USERS } from "../src/demo/demoData.js";
+import { createCoreBooking } from "../src/services/createBooking.service.js";
+import courtService from "../src/services/court.service.js";
+import { vietnamDate } from "../src/utils/courtQuery.js";
+import { distanceKm } from "../src/utils/coordinates.js";
+
+test("Demo seeding preserves existing data, bookings and user credentials", async t => {
+    const dbName = `pickleball_demo_test_${randomUUID().replaceAll("-", "")}`;
+    await mongoose.connect(process.env.TEST_MONGO_URL || "mongodb://127.0.0.1:27018", { dbName, serverSelectionTimeoutMS: 5000 });
+    t.after(async () => {
+        assert.equal(mongoose.connection.name, dbName);
+        assert.match(dbName, /^pickleball_demo_test_[a-f0-9]{32}$/);
+        await mongoose.connection.dropDatabase();
+        await mongoose.disconnect();
+    });
+    const unrelated = await Court.create({ name: "Existing real court", location: "Elsewhere", type: "INDOOR", pricePerHour: 100000 });
+    const accounts = DEMO_USERS.map(user => ({ ...user, password: randomBytes(18).toString("base64url") }));
+    const first = await seedDemoData({ accounts, days: 3 });
+    const date = vietnamDate(new Date(Date.now() + 86400000));
+    await t.test("Six fictional venues have complete hourly schedules inside the 5 km demo circle", async () => {
+        assert.equal(first.courts.length, 6);
+        assert.equal(first.subCourts, 12);
+        assert.equal(first.slots, 6 * 2 * 16 * 3);
+        for (const court of DEMO_COURTS) assert.ok(distanceKm(DEMO_CENTER.latitude, DEMO_CENTER.longitude, court.latitude, court.longitude) <= 5);
+        const nearby = await courtService.getNearbyCourts({ lat: DEMO_CENTER.latitude, lng: DEMO_CENTER.longitude, radius: 5, date, limit: 50 });
+        assert.equal(nearby.courts.length, 6);
+        assert.equal((await courtService.getCourtsListing({ location: "thu duc", date })).pagination.totalItems, 3);
+        assert.equal((await courtService.getCourtsListing({ location: "binh duong", date })).pagination.totalItems, 3);
+        const slots = await CourtSlot.find({ courtId: DEMO_COURTS[0]._id, date }).lean();
+        assert.equal(slots.length, 32);
+        assert.ok(slots.some(slot => slot.startTime === "06:00" && slot.endTime === "07:00"));
+        assert.ok(slots.some(slot => slot.startTime === "21:00" && slot.endTime === "22:00"));
+    });
+    await t.test("Re-running the seed neither duplicates rows nor unlocks an actual booking", async () => {
+        const slot = await CourtSlot.findOne({ courtId: DEMO_COURTS[0]._id, date, startTime: "18:00" });
+        const booked = await createCoreBooking(DEMO_USERS[0]._id, { slotId: String(slot._id), requestKey: "demo_seed_preserve_booking" });
+        const passwordBefore = (await User.findById(DEMO_USERS[0]._id)).password;
+        const repeated = await seedDemoData({ accounts, days: 3 });
+        assert.equal(repeated.slots, first.slots);
+        assert.equal(await Court.countDocuments(), 7);
+        assert.equal(await SubCourt.countDocuments(), 12);
+        assert.equal(await User.countDocuments(), 2);
+        assert.ok(await Court.findById(unrelated._id));
+        const held = await CourtSlot.findById(slot._id);
+        assert.equal(held.isBooked, true);
+        assert.equal(String(held.bookingId), String(booked.bookingId));
+        assert.equal((await Booking.findById(booked.bookingId)).reservationState, "COMMITTED");
+        const player = await User.findById(DEMO_USERS[0]._id);
+        assert.equal(player.password, passwordBefore);
+        assert.ok(await bcrypt.compare(accounts[0].password, player.password));
+    });
+    await t.test("Mismatched credentials or unrelated reserved IDs are rejected instead of overwritten", async () => {
+        await assert.rejects(() => seedDemoData({ accounts: accounts.map(user => ({ ...user, password: randomBytes(18).toString("base64url") })), days: 3 }), /credentials/);
+        await Court.updateOne({ _id: DEMO_COURTS[0]._id }, { name: "Renamed by owner" });
+        await assert.rejects(() => seedDemoData({ accounts, days: 3 }), /reserved demo court/);
+        assert.equal((await Court.findById(DEMO_COURTS[0]._id)).name, "Renamed by owner");
+        assert.equal(await Court.countDocuments(), 7);
+    });
+});
