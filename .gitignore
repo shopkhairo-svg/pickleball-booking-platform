@@ -12,6 +12,9 @@ backend/.env.*
 # Generated local demo login credentials
 backend/.demo-credentials.json
 
+# Production deployment configuration (domain settings and secrets)
+deployment/env
+
 # Test reports and caches
 /test-results/
 /playwright-report/
