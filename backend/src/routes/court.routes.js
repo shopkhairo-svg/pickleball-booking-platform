@@ -80,7 +80,7 @@ router.get("/", globalLimiter, (req, res) => courtController.getCourts(req, res)
  *         name: limit
  *         schema: { type: integer, minimum: 1, maximum: 15, default: 8 }
  *     responses:
- *       200: { description: Suggestions with id, label, value, description, source and optional locationId or courtCount }
+*       200: { description: "Suggestions with id, label, value, description, source and optional locationId or courtCount" }
  *       400: { description: Invalid search text or limit }
  *       503: { description: Court address lookup temporarily unavailable }
  */
