@@ -3,17 +3,21 @@ import { Link } from "react-router-dom";
 import FavoriteButton from "@/components/FavoriteButton";
 
 export default function CourtCard({ court, date }) {
-    const imageUrl = court.images?.[0]?.imageUrl || "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200";
+    const imageUrl = court.images?.[0]?.imageUrl;
 
     return (
         <article className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-zinc-200/50 bg-white shadow-[0_8px_30px_rgba(9,25,18,0.02)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_40px_rgba(9,25,18,0.06)]">
             <div className="relative aspect-[16/10] overflow-hidden bg-zinc-100">
-                <img
+                {imageUrl ? <img
                     alt={court.name}
                     className="h-full w-full object-cover object-center transition-transform duration-700 group-hover:scale-103"
                     src={imageUrl}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/40 to-transparent" />
+                    loading="lazy"
+                /> : <div className="flex h-full flex-col items-center justify-center gap-2 bg-[linear-gradient(140deg,#dcece3,#edf3ef_55%,#d4e6dd)] text-emerald-900">
+                    <span className="material-symbols-outlined text-5xl">sports_tennis</span>
+                    <span className="text-xs font-bold">Chưa có ảnh sân</span>
+                </div>}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-zinc-950/40 to-transparent" />
 
                 <span className={`absolute right-3.5 top-3.5 rounded-lg px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase ${court.type === "INDOOR" ? "bg-blue-600 text-white" : "bg-amber-600 text-white"}`}>
                     {court.type}

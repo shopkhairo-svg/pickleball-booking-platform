@@ -29,7 +29,7 @@ async function generate(court, subCourts, days) {
     const currentTime = now.toLocaleTimeString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
     // Only remove free obsolete slots; a concurrent booking claim wins atomically.
     await CourtSlot.deleteMany({
-        courtId: court._id, subCourtId: { $in: subCourts.map(sub => sub._id) }, isBooked: false,
+        courtId: court._id, subCourtId: { $in: subCourts.map(sub => sub._id) }, isBooked: false, isBlocked: { $ne: true },
         $or: [{ date: { $gt: today } }, { date: today, startTime: { $gt: currentTime } }],
         $nor: times.map(time => ({ startTime: time.startTime, endTime: time.endTime }))
     });
@@ -38,16 +38,16 @@ async function generate(court, subCourts, days) {
         const existingFilter = { courtId: court._id, subCourtId: { $in: subCourts.map(sub => sub._id) }, date };
         let existing = await CourtSlot.find(existingFilter).lean();
         const occupied = existing.filter(slot => slot.isBooked);
-        const conflicts = existing.filter(slot => !slot.isBooked && (date > today || slot.startTime > currentTime) && occupied.some(booked => String(booked.subCourtId) === String(slot.subCourtId) && overlaps(slot, booked)));
+        const conflicts = existing.filter(slot => !slot.isBooked && !slot.isBlocked && (date > today || slot.startTime > currentTime) && occupied.some(booked => String(booked.subCourtId) === String(slot.subCourtId) && overlaps(slot, booked)));
         if (conflicts.length) {
-            await CourtSlot.deleteMany({ _id: { $in: conflicts.map(slot => slot._id) }, isBooked: false });
+            await CourtSlot.deleteMany({ _id: { $in: conflicts.map(slot => slot._id) }, isBooked: false, isBlocked: { $ne: true } });
             existing = await CourtSlot.find(existingFilter).lean();
         }
         const operations = subCourts.flatMap(sub => times.filter(time =>
             !existing.some(slot => String(slot.subCourtId) === String(sub._id) && overlaps(slot, time))
         ).map(time => ({ updateOne: {
             filter: { subCourtId: sub._id, date, startTime: time.startTime },
-            update: { $setOnInsert: { courtId: court._id, subCourtId: sub._id, date, ...time, isBooked: false } },
+            update: { $setOnInsert: { courtId: court._id, subCourtId: sub._id, date, ...time, pricePerHour: court.pricePerHour, isPriceOverride: false, isBooked: false, isBlocked: false } },
             upsert: true
         } })));
         if (operations.length) {

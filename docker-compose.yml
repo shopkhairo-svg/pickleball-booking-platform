@@ -63,8 +63,12 @@ services:
       # Cho phép frontend container truy cập API
       FRONTEND_URL: http://localhost
       TRUST_PROXY: "1"
+      # Keep court image uploads working without Cloudinary; files persist in media-data.
+      COURT_IMAGE_STORAGE: local
     ports:
       - "5001:5000"   # Ánh xạ ra cổng 5001 ở máy host để tránh trùng với backend đang chạy local (port 5000)
+    volumes:
+      - media-data:/app/uploads
     depends_on:
       mongo:
         condition: service_healthy
@@ -96,6 +100,8 @@ volumes:
   mongo-data:
     driver: local
   redis-data:
+    driver: local
+  media-data:
     driver: local
 
 # ---- Networks ----

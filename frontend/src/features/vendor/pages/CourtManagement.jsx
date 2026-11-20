@@ -85,6 +85,7 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
                             onChange={(e) => setForm({ ...form, address: e.target.value })}
                             className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                         />
+                        <p className="mt-1 text-xs text-gray-500">Nhập địa chỉ thực tế như hiển thị trên Maps. Mở <a href="https://maps.google.com" target="_blank" rel="noreferrer" className="text-primary underline">Google Maps</a>, tìm sân và đối chiếu số nhà/đường; nhấp phải vị trí để lấy tọa độ.</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -161,6 +162,7 @@ const CourtFormModal = ({ court, onClose, onSave }) => {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Hình ảnh</label>
+                        <p className="mb-2 text-xs text-gray-500">Tải ảnh do chủ sân sở hữu hoặc được phép sử dụng (ảnh chụp tại sân là tốt nhất). Không tải/copy ảnh Google Maps vào đây; hãy thêm ảnh do bạn có quyền sử dụng.</p>
                         <input
                             type="file" accept="image/*" multiple
                             onChange={(e) => setFiles(Array.from(e.target.files))}

@@ -1,8 +1,13 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
-// ✅ Fix #12: AccessToken KHÔNG được persist vào localStorage (dễ bị XSS đánh cắp)
-// Chỉ lưu user info & isAuthenticated vào localStorage, accessToken chỉ sống trong memory
+// Remove the former cross-tab credentials once; sessionStorage is tab-scoped.
+if (typeof window !== "undefined") {
+    window.localStorage.removeItem("pickleball-auth-storage");
+    window.localStorage.removeItem("refreshToken");
+}
+
+// Access tokens stay in memory; user info and auth state persist only for this tab.
 // Khi refresh trang → cần gọi /auth/refresh-token để lấy accessToken mới
 
 export const useAuthStore = create(
@@ -29,8 +34,10 @@ export const useAuthStore = create(
                 }),
         }),
         {
-            name: "pickleball-auth-storage",
-            // ✅ Fix #12: Chỉ persist user + isAuthenticated, KHÔNG persist accessToken
+            name: "pickleball-auth-storage-tab",
+            // Each browser tab owns an independent identity and refresh token.
+            storage: createJSONStorage(() => sessionStorage),
+            // Access token remains memory-only.
             partialize: (state) => ({
                 user: state.user,
                 isAuthenticated: state.isAuthenticated

@@ -21,7 +21,7 @@ export function courtDate(value, fallback) {
 export function futureSlotFilter(date, now = new Date()) {
     const today = vietnamDate(now);
     if (date < today) return null;
-    const filter = { date, isBooked: false };
+    const filter = { date, isBooked: false, isBlocked: { $ne: true } };
     if (date === today) {
         const time = now.toLocaleTimeString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
         // HH:mm is less than HH:mm:ss in the same minute: starting now is already too late.

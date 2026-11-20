@@ -5,6 +5,7 @@ import { courtDate, futureSlotFilter, queryNumber, vietnamDate } from "../utils/
 import courtRepository from "../repositories/court.repository.js";
 import SubCourt from "../models/subCourt.model.js";
 import CourtSlot from "../models/courtSlot.model.js";
+import { resolveSlotHourlyPrice } from "../utils/slotPricing.js";
 
 const pagination = (total, page, limit) => ({ totalItems: total, currentPage: page, totalPages: Math.ceil(total / limit), limit });
 
@@ -44,6 +45,8 @@ class CourtService {
             _id: sub._id, name: sub.name, status: sub.status,
             slots: (slotsBySub.get(String(sub._id)) || []).map(slot => ({
                 ...slot,
+                pricePerHour: resolveSlotHourlyPrice(slot, court),
+                isUnavailable: slot.isBlocked === true,
                 isPast: new Date(`${slot.date}T${slot.startTime}:00+07:00`) <= now,
                 isMaintenance: sub.status !== "AVAILABLE" || court.status !== "AVAILABLE"
             }))

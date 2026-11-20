@@ -1,6 +1,7 @@
 import axiosClient from "../api/axios";
 
 export const reviewService = {
+    getCommunityReviews: (params = {}) => axiosClient.get("/reviews", { params }),
     getCourtReviews: (courtId, params = {}) =>
         axiosClient.get(`/reviews/courts/${courtId}`, { params }),
     getEligibility: (courtId) =>

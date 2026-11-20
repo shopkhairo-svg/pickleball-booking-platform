@@ -1,5 +1,7 @@
 // src/services/upload.service.js
 import { cloudinary } from "../config/cloudinary.js";
+import { unlink } from "node:fs/promises";
+import path from "node:path";
 
 class UploadService {
     /**
@@ -30,6 +32,13 @@ class UploadService {
      */
     async deleteFile(publicId) {
         if (!publicId) return;
+        if (publicId.startsWith("local:courts/")) {
+            const filename = path.basename(publicId.slice("local:courts/".length));
+            if (!filename || filename === "." || filename === "..") return;
+            try { await unlink(path.resolve("uploads", "courts", filename)); }
+            catch (error) { if (error.code !== "ENOENT") throw error; }
+            return { result: "ok" };
+        }
         return await cloudinary.uploader.destroy(publicId);
     }
 }

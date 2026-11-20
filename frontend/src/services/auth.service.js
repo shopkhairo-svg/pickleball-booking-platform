@@ -30,7 +30,7 @@ export const authService = {
     },
     // 5. Luồng đăng xuất hệ thống và xóa whitelist token trên Redis
     logout: async () => {
-        const refreshToken = localStorage.getItem("refreshToken");
+        const refreshToken = sessionStorage.getItem("refreshToken");
         try {
             // Báo cho Backend biết để quăng cái refreshToken này vào blacklist/xóa khỏi Redis
             await axiosClient.post("/auth/logout", { refreshToken });
@@ -38,7 +38,7 @@ export const authService = {
             console.error("Lỗi xóa phiên đăng xuất ở Backend:", error);
         } finally {
             // Dù Backend có lỗi hay không, Frontend vẫn phải xóa sạch token local để đảm bảo an toàn
-            localStorage.removeItem("refreshToken");
+            sessionStorage.removeItem("refreshToken");
             useAuthStore.getState().clearAuth();
             // Trình kích hoạt xóa kho đồ Zustand sẽ được gọi ở component giao diện sau
         }

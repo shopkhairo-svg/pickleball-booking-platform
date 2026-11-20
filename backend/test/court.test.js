@@ -20,8 +20,8 @@ test("Court dates validate actual calendar days and Vietnam midnight", () => {
     assert.equal(courtDate("2028-02-29"), "2028-02-29");
     const now = new Date("2030-01-01T17:10:30Z");
     assert.equal(futureSlotFilter("2030-01-01", now), null);
-    assert.deepEqual(futureSlotFilter("2030-01-02", now), { date: "2030-01-02", isBooked: false, startTime: { $gt: "00:10:30" } });
-    assert.deepEqual(futureSlotFilter("2030-01-03", now), { date: "2030-01-03", isBooked: false });
+    assert.deepEqual(futureSlotFilter("2030-01-02", now), { date: "2030-01-02", isBooked: false, isBlocked: { $ne: true }, startTime: { $gt: "00:10:30" } });
+    assert.deepEqual(futureSlotFilter("2030-01-03", now), { date: "2030-01-03", isBooked: false, isBlocked: { $ne: true } });
 });
 
 test("Nearby bounding box supports the date line and polar latitudes", () => {

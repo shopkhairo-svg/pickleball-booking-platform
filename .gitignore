@@ -11,6 +11,8 @@ backend/.env.*
 
 # Generated local demo login credentials
 backend/.demo-credentials.json
+backend/.demo-review-credentials.json
+backend/.local-data/
 
 # Production deployment configuration (domain settings and secrets)
 deployment/env

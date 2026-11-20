@@ -24,10 +24,14 @@ const courtSlotSchema = new mongoose.Schema({
         type: String, // Ví dụ: "09:00"
         required: true
     },
+    // Snapshot price for this individual bookable time. Older rows fall back to court price.
+    pricePerHour: { type: Number, min: 0, max: 1000000000 },
+    isPriceOverride: { type: Boolean, default: false },
     isBooked: {
         type: Boolean,
         default: false
     },
+    isBlocked: { type: Boolean, default: false },
     bookingId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Booking",

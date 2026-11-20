@@ -10,6 +10,7 @@ import MainLayout from "../layouts/MainLayout.jsx";
 import Home from "../features/home/pages/Home";
 import CourtList from "../features/court/pages/CourtList";
 import CourtDetail from "../features/court/pages/CourtDetail";
+import ReviewCommunity from "../features/court/pages/ReviewCommunity.jsx";
 
 // 👤 User imports
 import UserProfile from "../features/user/pages/UserProfile.jsx";
@@ -31,6 +32,7 @@ import VendorDashboard from "../features/vendor/pages/Dashboard.jsx";
 import VendorCourtManagement from "../features/vendor/pages/CourtManagement.jsx";
 import VendorBookingManagement from "../features/vendor/pages/BookingManagement.jsx";
 import VendorReviews from "../features/vendor/pages/Reviews.jsx";
+import VendorAvailability from "../features/vendor/pages/Availability.jsx";
 
 // 🚚 Shipper imports
 import ShipperLayout from "../layouts/ShipperLayout.jsx";
@@ -68,6 +70,10 @@ export const router = createBrowserRouter([
             {
                 path: "/courts/:id",
                 element: <CourtDetail />,
+            },
+            {
+                path: "/reviews",
+                element: <ReviewCommunity />,
             }
         ]
     },
@@ -170,6 +176,10 @@ export const router = createBrowserRouter([
                     {
                         path: "bookings",
                         element: <CourtVendorFeature><VendorBookingManagement /></CourtVendorFeature>,
+                    },
+                    {
+                        path: "availability",
+                        element: <CourtVendorFeature><VendorAvailability /></CourtVendorFeature>,
                     },
                     {
                         path: "equipments/*",

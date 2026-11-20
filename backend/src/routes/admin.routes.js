@@ -3,7 +3,7 @@ import express from "express";
 import adminController from "../controllers/admin.controller.js";
 import { verifyToken, requireAdmin } from "../middlewares/auth.middleware.js";
 import { globalLimiter } from "../middlewares/rateLimiter.middleware.js";
-import { uploadCourtCloud } from "../config/cloudinary.js";
+import { uploadCourtImages } from "../config/cloudinary.js";
 import { inDevelopment } from "../middlewares/development.middleware.js";
 
 const router = express.Router();
@@ -19,8 +19,8 @@ router.get("/courts/:id/subcourts", adminController.getSubCourts);
 router.post("/courts/:courtId/subcourts", adminController.createSubCourt);
 router.put("/subcourts/:id", adminController.updateSubCourt);
 router.delete("/subcourts/:id", adminController.deleteSubCourt);
-router.post("/courts", uploadCourtCloud.array("images", 10), adminController.createCourt);
-router.put("/courts/:id", uploadCourtCloud.array("images", 10), adminController.updateCourt);
+router.post("/courts", uploadCourtImages, adminController.createCourt);
+router.put("/courts/:id", uploadCourtImages, adminController.updateCourt);
 router.delete("/courts/:id", adminController.deleteCourt);
 router.put("/courts/:id/block", adminController.blockCourt);
 // Route xóa 1 ảnh cụ thể — publicId được encodeURIComponent ở client nên không có slash thật

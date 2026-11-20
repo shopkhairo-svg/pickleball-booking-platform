@@ -36,6 +36,11 @@ export default function VendorLayout() {
                       icon: "calendar_month",
                   },
                   {
+                      path: "/vendor/availability",
+                      label: "Giờ trống & giá",
+                      icon: "schedule",
+                  },
+                  {
                       path: "/vendor/reviews",
                       label: "Đánh giá",
                       icon: "star",

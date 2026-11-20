@@ -5,7 +5,7 @@ import path from 'path';
 export default defineConfig({
   plugins: [react()],
   server: {
-    proxy: { '/api': 'http://localhost:5001' },
+    proxy: { '/api': 'http://localhost:5001', '/uploads': 'http://localhost:5001' },
   },
   resolve: {
     alias: {

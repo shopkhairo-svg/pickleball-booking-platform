@@ -7,13 +7,16 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "node --experimental-test-module-mocks --test test/auth.test.js test/core.test.js test/development.test.js test/reminder.test.js test/coreServices.test.js test/court.test.js test/location.test.js",
+    "test": "node --experimental-test-module-mocks --test test/auth.test.js test/core.test.js test/development.test.js test/reminder.test.js test/coreServices.test.js test/court.test.js test/location.test.js test/reviewCommunity.test.js test/slotPricing.test.js test/courtImageUpload.test.js",
     "dev": "nodemon src/server.js",
     "seed": "node src/seed.js",
     "seed:demo": "node src/scripts/seedDemo.js",
+    "seed:demo-reviews": "node src/scripts/seedDemoReviews.js",
+    "import:map-courts": "node src/scripts/importMapCourts.js",
     "verify:demo": "node src/scripts/verifyDemoBooking.js",
+    "migrate:vendor-courts": "node src/scripts/migrateVendorCourtIndex.js",
     "test:auth": "node --experimental-test-module-mocks --test test/auth.test.js",
-    "test:integration": "node --test test/booking.integration.test.js test/bookingLifecycle.integration.test.js test/bookingConflict.integration.test.js test/court.integration.test.js test/location.integration.test.js test/demo.integration.test.js"
+    "test:integration": "node --test test/booking.integration.test.js test/bookingLifecycle.integration.test.js test/bookingConflict.integration.test.js test/court.integration.test.js test/location.integration.test.js test/demo.integration.test.js test/mapCourtImport.integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

@@ -6,17 +6,9 @@ const adminService = {
     getCourts: (params) => axiosClient.get("/admin/courts", { params }),
     getCourtById: (id) => axiosClient.get(`/admin/courts/${id}`),
     createCourt: (formData) =>
-        axiosClient.post("/admin/courts", formData, {
-            headers: {
-                "Content-Type": "multipart/form-data",
-            },
-        }),
+        axiosClient.post("/admin/courts", formData),
     updateCourt: (id, formData) =>
-        axiosClient.put(`/admin/courts/${id}`, formData, {
-            headers: {
-                "Content-Type": "multipart/form-data",
-            },
-        }),
+        axiosClient.put(`/admin/courts/${id}`, formData),
     // Xóa 1 ảnh cụ thể khỏi sân (Cloudinary + DB) — encode publicId để xử lý slash
     deleteCourtImage: (courtId, publicId) =>
         axiosClient.delete(`/admin/courts/${courtId}/images/${encodeURIComponent(publicId)}`),

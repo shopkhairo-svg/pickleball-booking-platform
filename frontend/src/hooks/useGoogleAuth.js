@@ -9,7 +9,7 @@ export function useGoogleAuth(setError) {
         try {
             if (!response.credential) throw new Error("Google không trả về ID token.");
             const data = await authService.googleLogin(response.credential);
-            localStorage.setItem("refreshToken", data.refreshToken);
+            sessionStorage.setItem("refreshToken", data.refreshToken);
             setAuth(data.user, data.accessToken);
             window.location.href = data.redirectUrl;
         } catch (error) {

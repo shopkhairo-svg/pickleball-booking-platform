@@ -41,6 +41,21 @@ export function parseCourtInput(data, existing) {
     return result;
 }
 
+export function parseVendorSlotUpdate(data) {
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw badRequest("Cập nhật khung giờ không hợp lệ.");
+    const update = {};
+    if (data.pricePerHour !== undefined) {
+        update.pricePerHour = queryNumber(data.pricePerHour, { min: 0, max: 1000000000, integer: true });
+        update.isPriceOverride = true;
+    }
+    if (data.isBlocked !== undefined) {
+        if (typeof data.isBlocked !== "boolean") throw badRequest("Trạng thái khung giờ phải là true hoặc false.");
+        update.isBlocked = data.isBlocked;
+    }
+    if (Object.keys(update).length === 0) throw badRequest("Hãy chọn giá mới hoặc trạng thái khung giờ.");
+    return update;
+}
+
 export function scheduleChanged(data, existing) {
     return ["openTime", "closeTime", "slotDuration"].some(key => data[key] !== undefined && data[key] !== existing[key]);
 }

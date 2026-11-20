@@ -154,13 +154,7 @@ export default function CourtDetail() {
     }
 
     // 🎯 CLOUDINARY CONVERT: Biến đổi mảng Object ảnh của database mới thành mảng chuỗi URL sạch
-    const images = court.images?.length > 0
-        ? court.images.map(imgObj => imgObj.imageUrl)
-        : [
-            "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200",
-            "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?q=80&w=800",
-            "https://images.unsplash.com/photo-1542144557-f550eeed3b6c?q=80&w=800"
-        ];
+    const images = (court.images || []).map(imgObj => imgObj.imageUrl).filter(Boolean);
 
     const globalTimeSlots = [...new Set(subCourtsTimeline.flatMap(sub => sub.slots.map(slot => slot.startTime)))].sort();
 
@@ -229,9 +223,11 @@ export default function CourtDetail() {
                         <div className="lg:col-span-7 flex flex-col gap-3">
                             {/* Ảnh chính */}
                             <div className="relative rounded-2xl overflow-hidden bg-surface-container-high group h-[380px] lg:h-[440px]">
+                                {images.length > 0 ? <>
                                 <img
                                     src={images[activeImageIndex]}
                                     alt={court.name}
+                                    loading="eager"
                                     className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                                 />
                                 <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
@@ -239,6 +235,10 @@ export default function CourtDetail() {
                                 <div className="absolute bottom-3 right-3 bg-black/50 backdrop-blur-sm text-white text-xs font-bold px-2.5 py-1 rounded-full">
                                     {activeImageIndex + 1} / {images.length}
                                 </div>
+                                </> : <div className="flex h-full flex-col items-center justify-center gap-3 bg-[linear-gradient(140deg,#dcece3,#edf3ef_55%,#d4e6dd)] text-emerald-900">
+                                    <span className="material-symbols-outlined text-6xl">add_a_photo</span>
+                                    <span className="font-bold">Chưa có ảnh thực tế cho sân này</span>
+                                </div>}
                             </div>
 
                             {/* Thumbnail strip ngang - chỉ hiển thị ảnh thật, không lặp */}
@@ -297,7 +297,7 @@ export default function CourtDetail() {
                                     {(() => {
                                         const minutes = time => time.split(":").map(Number).reduce((hour, minute) => hour * 60 + minute);
                                         const durationHours = selectedSlot ? (minutes(selectedSlot.endTime) - minutes(selectedSlot.time)) / 60 : (court.slotDuration || 60) / 60;
-                                        const basePrice = Math.round(court.pricePerHour * durationHours);
+                                        const basePrice = Math.round((selectedSlot?.pricePerHour ?? court.pricePerHour) * durationHours);
                                         const fee = Math.round(basePrice * 0.05);
                                         const total = basePrice + fee;
                                         return (
@@ -415,7 +415,8 @@ export default function CourtDetail() {
                                                                             slotId: matchedSlot._id,
                                                                             courtName: subCourt.name,
                                                                             time: matchedSlot.startTime,
-                                                                            endTime: matchedSlot.endTime
+                                                                            endTime: matchedSlot.endTime,
+                                                                            pricePerHour: matchedSlot.pricePerHour ?? court.pricePerHour
                                                                         }); }}
                                                                         className={`w-full h-9 rounded-lg text-[11px] font-bold transition-all flex flex-col items-center justify-center ${
                                                                             isSelected
@@ -423,7 +424,7 @@ export default function CourtDetail() {
                                                                                 : "bg-emerald-50/40 text-primary border border-emerald-100/60 hover:bg-primary/10 hover:border-primary"
                                                                         }`}
                                                                     >
-                                                                        <span>Trống</span>
+                                                                        <span>{matchedSlot.pricePerHour ?? court.pricePerHour ? `${Math.round(matchedSlot.pricePerHour ?? court.pricePerHour).toLocaleString("vi-VN")}₫` : "Trống"}</span>
                                                                     </button>
                                                                 )}
                                                             </div>

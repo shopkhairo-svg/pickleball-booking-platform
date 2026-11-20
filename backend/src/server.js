@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 
 import { connectDB } from "./config/db.js"; //
 import authRoutes from "./routes/auth.routes.js";
@@ -48,6 +49,7 @@ app.use(cors({
     credentials: true // Cho phép gửi cookie (cần cho httpOnly refreshToken sau này)
 }));
 app.use(express.json());
+app.use("/uploads", express.static(path.resolve("uploads"), { fallthrough: false, maxAge: "1d" }));
 
 // ---------- Swagger setup ----------
 const swaggerDefinition = {

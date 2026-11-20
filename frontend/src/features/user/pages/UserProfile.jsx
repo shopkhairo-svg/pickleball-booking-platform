@@ -715,7 +715,7 @@ export default function UserProfile() {
     const handleLogout = async () => {
         await authService.logout();
         clearAuth();
-        localStorage.removeItem("refreshToken");
+        sessionStorage.removeItem("refreshToken");
         navigate("/login");
     };
 

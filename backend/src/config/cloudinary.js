@@ -2,6 +2,9 @@
 import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
 import multer from "multer";
+import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
 import "dotenv/config";
 
 // ─────────────────────────────────────────────────────────────
@@ -93,7 +96,73 @@ const deliveryProofStorage = new CloudinaryStorage({
 // ─────────────────────────────────────────────────────────────
 
 /** Upload ảnh sân — dùng cho Admin & Vendor tạo/sửa cụm sân */
-export const uploadCourtCloud = multer({ storage: courtStorage });
+const uploadCourtCloud = multer({
+    storage: courtStorage,
+    limits: { files: 10, fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+        if (!file.mimetype?.startsWith("image/")) return callback(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
+        callback(null, true);
+    }
+});
+
+export function uploadCourtImages(req, res, next) {
+    if (process.env.COURT_IMAGE_STORAGE === "local") {
+        const storage = multer.diskStorage({
+            destination: (_request, _file, callback) => {
+                const directory = path.resolve("uploads", "courts");
+                mkdir(directory, { recursive: true }).then(() => callback(null, directory), callback);
+            },
+            filename: (_request, file, callback) => {
+                const extension = { "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" }[file.mimetype];
+                callback(null, `${randomUUID()}${extension}`);
+            }
+        });
+        const localUpload = multer({
+            storage,
+            limits: { files: 10, fileSize: 10 * 1024 * 1024 },
+            fileFilter: (_request, file, callback) => {
+                const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+                if (!allowed.has(file.mimetype)) return callback(new multer.MulterError("LIMIT_UNEXPECTED_FILE", file.fieldname));
+                callback(null, true);
+            }
+        });
+        return localUpload.array("images", 10)(req, res, error => {
+            if (error instanceof multer.MulterError) {
+                const tooLarge = error.code === "LIMIT_FILE_SIZE";
+                return res.status(400).json({ success: false, code: error.code, message: tooLarge ? "Mỗi ảnh phải nhỏ hơn 10 MB." : "Chỉ nhận tối đa 10 ảnh JPG, PNG hoặc WebP trong trường images." });
+            }
+            if (error) {
+                console.error("[Court image upload] Local storage failed:", error.code || error.name || "unknown");
+                return res.status(500).json({ success: false, code: "LOCAL_IMAGE_STORAGE_FAILED", message: "Không thể lưu ảnh sân. Hãy kiểm tra dung lượng và quyền ghi của thư mục lưu ảnh." });
+            }
+            for (const file of req.files || []) {
+                file.path = `/uploads/courts/${file.filename}`;
+                file.filename = `local:courts/${file.filename}`;
+            }
+            return next();
+        });
+    }
+
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+        return res.status(503).json({ success: false, code: "IMAGE_UPLOAD_NOT_CONFIGURED", message: "Chưa cấu hình Cloudinary. Hãy kiểm tra CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY và CLOUDINARY_API_SECRET ở backend/.env." });
+    }
+
+    uploadCourtCloud.array("images", 10)(req, res, error => {
+        if (!error) return next();
+        if (error instanceof multer.MulterError) {
+            const tooLarge = error.code === "LIMIT_FILE_SIZE";
+            return res.status(400).json({ success: false, code: error.code, message: tooLarge ? "Mỗi ảnh phải nhỏ hơn 10 MB." : "Chỉ nhận tối đa 10 ảnh định dạng hình ảnh trong trường images." });
+        }
+
+        const message = String(error.message || error.error?.message || "");
+        if (Number(error.http_code) === 401 || /unknown api_key|invalid api_key|api key.*invalid/i.test(message)) {
+            console.error("[Court image upload] Cloudinary rejected API credentials.");
+            return res.status(503).json({ success: false, code: "CLOUDINARY_AUTH_FAILED", message: "Cloudinary từ chối API key. Hãy kiểm tra CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY và CLOUDINARY_API_SECRET trong backend/.env rồi khởi động lại backend." });
+        }
+        console.error("[Court image upload] Cloudinary upload failed:", error.name || "Error", error.http_code || error.code || "unknown");
+        return res.status(502).json({ success: false, code: "CLOUDINARY_UPLOAD_FAILED", message: "Cloudinary không nhận được ảnh. Kiểm tra cấu hình Cloudinary và thử lại." });
+    });
+}
 
 /** Upload avatar — dùng cho User cập nhật ảnh đại diện */
 export const uploadAvatarCloud = multer({ storage: avatarStorage });

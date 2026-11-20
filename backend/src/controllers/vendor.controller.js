@@ -20,6 +20,16 @@ class VendorController {
         }
     }
 
+    async getCourtSlots(req, res) {
+        try { const slots = await vendorService.getVendorCourtSlots(req.user.id, req.params.courtId, req.query.date); return res.status(200).json({ success: true, slots }); }
+        catch (error) { return handleError(res, error); }
+    }
+
+    async updateSlot(req, res) {
+        try { const slot = await vendorService.updateVendorSlot(req.user.id, req.params.id, req.body); return res.status(200).json({ success: true, slot }); }
+        catch (error) { return handleError(res, error); }
+    }
+
     async createCourt(req, res) {
         try {
             const court = await vendorService.createVendorCourt(req.user.id, req.body, req.files);

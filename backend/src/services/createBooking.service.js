@@ -5,6 +5,7 @@ import CourtSlot from "../models/courtSlot.model.js";
 import SubCourt from "../models/subCourt.model.js";
 import Court from "../models/court.model.js";
 import notificationService from "./notification.service.js";
+import { resolveSlotHourlyPrice } from "../utils/slotPricing.js";
 
 const summary = booking => ({ message: "Đặt sân thành công, đang chờ xác nhận. Thanh toán tại sân.", bookingId: booking._id, bookingCode: booking.bookingCode, totalPrice: booking.totalPrice, courtPrice: booking.courtPrice, equipmentPrice: 0, discount: 0, pointsUsed: 0 });
 const slotConflict = (alreadyBooked = false) => Object.assign(new Error(alreadyBooked
@@ -32,19 +33,20 @@ export async function createCoreBooking(userId, payload) {
         if (existing) return replay(existing, slotId);
     }
     const candidate = await CourtSlot.findById(slotId);
-    if (!candidate) throw slotConflict();
+    if (!candidate || candidate.isBlocked) throw slotConflict();
     const startsAt = new Date(`${candidate.date}T${candidate.startTime}:00+07:00`);
     const endsAt = new Date(`${candidate.date}T${candidate.endTime}:00+07:00`);
     const durationHours = (endsAt - startsAt) / 3600000;
     if (!Number.isFinite(startsAt.getTime()) || startsAt <= new Date() || !Number.isFinite(durationHours) || durationHours <= 0) throw new Error("Khung giờ không hợp lệ hoặc đã bắt đầu.");
     const [court, subCourt] = await Promise.all([Court.findById(candidate.courtId), SubCourt.findById(candidate.subCourtId)]);
     if (!court || court.status !== "AVAILABLE" || !subCourt || subCourt.status !== "AVAILABLE" || String(subCourt.courtId) !== String(court._id)) throw new Error("Sân hiện không nhận đặt lịch.");
-    if (!Number.isFinite(court.pricePerHour) || court.pricePerHour < 0) throw new Error("Giá sân chưa được cấu hình hợp lệ.");
+    const slotRate = resolveSlotHourlyPrice(candidate, court);
+    if (!Number.isFinite(slotRate) || slotRate < 0) throw new Error("Giá sân chưa được cấu hình hợp lệ.");
 
     const bookingId = new mongoose.Types.ObjectId();
     let booking;
     try {
-        const courtPrice = Math.round(court.pricePerHour * durationHours);
+        const courtPrice = Math.round(slotRate * durationHours);
         const systemFee = Math.round(courtPrice * 0.05);
         booking = await Booking.create({
             _id: bookingId, bookingCode: `BK-${randomUUID().replaceAll("-", "").slice(0, 16).toUpperCase()}`,
@@ -63,7 +65,10 @@ export async function createCoreBooking(userId, payload) {
         throw error;
     }
     try {
-        const slot = await CourtSlot.findOneAndUpdate({ _id: slotId, isBooked: false, startTime: candidate.startTime, endTime: candidate.endTime, date: candidate.date }, {
+        const rateGuard = candidate.pricePerHour === undefined
+            ? { $or: [{ pricePerHour: { $exists: false } }, { pricePerHour: null }] }
+            : { pricePerHour: candidate.pricePerHour };
+        const slot = await CourtSlot.findOneAndUpdate({ _id: slotId, isBooked: false, isBlocked: { $ne: true }, ...rateGuard, startTime: candidate.startTime, endTime: candidate.endTime, date: candidate.date }, {
             $set: { isBooked: true, bookingId }
         }, { returnDocument: "after" });
         if (!slot) {

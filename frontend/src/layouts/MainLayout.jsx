@@ -11,7 +11,7 @@ export default function MainLayout() {
     const handleLogout = async () => {
         await authService.logout();
         clearAuth();
-        localStorage.removeItem("refreshToken");
+        sessionStorage.removeItem("refreshToken");
         navigate("/login");
     };
 
@@ -46,6 +46,10 @@ export default function MainLayout() {
                             <NavLink to="/courts" className={getNavLinkClass}>
                                 <span className="material-symbols-outlined text-[17px]">sports_tennis</span>
                                 Sân bóng
+                            </NavLink>
+                            <NavLink to="/reviews" className={getNavLinkClass}>
+                                <span className="material-symbols-outlined text-[17px]">forum</span>
+                                Cộng đồng
                             </NavLink>
                             {isAuthenticated && (
                                 <NavLink to="/user/favorites" className={getNavLinkClass}>
@@ -144,6 +148,7 @@ export default function MainLayout() {
                             <h5 className="mb-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Hệ thống</h5>
                             <ul className="space-y-2 text-sm">
                                 <li><Link className="text-zinc-500 transition-colors duration-200 hover:text-primary" to="/courts">Danh sách sân</Link></li>
+                                <li><Link className="text-zinc-500 transition-colors duration-200 hover:text-primary" to="/reviews">Cộng đồng đánh giá</Link></li>
                                 <li><Link className="text-zinc-500 transition-colors duration-200 hover:text-primary" to="/user/favorites">Yêu thích</Link></li>
                                 <li><Link className="text-zinc-500 transition-colors duration-200 hover:text-primary" to="/user/profile">Hồ sơ</Link></li>
                             </ul>

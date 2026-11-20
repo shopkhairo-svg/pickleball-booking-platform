@@ -22,7 +22,8 @@ const upload = {
     array: () => (req, res, next) => { uploadCalls++; next(); },
     single: () => (req, res, next) => { uploadCalls++; next(); },
 };
-mock.module("../src/config/cloudinary.js", { namedExports: { uploadCourtCloud: upload } });
+const uploadCourtImages = (req, res, next) => { uploadCalls++; next(); };
+mock.module("../src/config/cloudinary.js", { namedExports: { uploadCourtCloud: upload, uploadCourtImages } });
 
 const routers = {};
 for (const [prefix, module] of Object.entries({

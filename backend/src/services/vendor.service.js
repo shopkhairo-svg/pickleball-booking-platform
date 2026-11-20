@@ -1,4 +1,4 @@
-import { parseCourtInput, courtText, courtStatus, scheduleChanged, assertCourtCanClose, assertScheduleAllowsBookings } from "../utils/courtInput.js";
+import { parseCourtInput, courtText, courtStatus, scheduleChanged, assertCourtCanClose, assertScheduleAllowsBookings, parseVendorSlotUpdate } from "../utils/courtInput.js";
 import mongoose from "mongoose";
 import Court from "../models/court.model.js";
 import Equipment from "../models/equipment.model.js";
@@ -13,7 +13,9 @@ import Maintenance from "../models/maintenance.model.js";
 import User from "../models/user.model.js";
 import Delivery from "../models/delivery.model.js";
 import { generateSlotsForNewSubCourt, regenerateSlotsForCourt } from "../utils/slotScheduler.js";
+import { courtDate, vietnamDate } from "../utils/courtQuery.js";
 import bookingService from "./booking.service.js";
+import { resolveSlotHourlyPrice } from "../utils/slotPricing.js";
 
 
 class VendorService {
@@ -192,12 +194,39 @@ class VendorService {
         return result;
     }
 
+    async getVendorCourtSlots(vendorId, courtId, date) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date || "")) throw Object.assign(new Error("Ngày phải có dạng YYYY-MM-DD."), { status: 400 });
+        const court = await Court.findOne({ _id: courtId, vendorId });
+        if (!court) throw Object.assign(new Error("Không tìm thấy sân thuộc quyền quản lý của bạn."), { status: 404 });
+        await regenerateSlotsForCourt(courtId);
+        const slots = await CourtSlot.find({ courtId, date }).populate("subCourtId", "name status").sort({ startTime: 1 }).lean();
+        return slots.map(slot => ({ ...slot, pricePerHour: resolveSlotHourlyPrice(slot, court) }));
+    }
+
+    async updateVendorSlot(vendorId, slotId, data) {
+        const update = parseVendorSlotUpdate(data);
+        const slot = await CourtSlot.findById(slotId);
+        if (!slot) throw Object.assign(new Error("Không tìm thấy khung giờ."), { status: 404 });
+        const court = await Court.findOne({ _id: slot.courtId, vendorId });
+        if (!court) throw Object.assign(new Error("Khung giờ không thuộc sân bạn quản lý."), { status: 403 });
+        const now = new Date();
+        const today = vietnamDate(now);
+        const time = now.toLocaleTimeString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+        if (slot.isBooked || slot.date < today || (slot.date === today && slot.startTime <= time)) {
+            throw Object.assign(new Error("Không thể thay đổi khung giờ đã đặt hoặc đã bắt đầu."), { status: 409 });
+        }
+        const concurrentGuard = { _id: slotId, isBooked: false, isBlocked: slot.isBlocked ?? false };
+        if (slot.pricePerHour === undefined) concurrentGuard.$or = [{ pricePerHour: { $exists: false } }, { pricePerHour: null }];
+        else concurrentGuard.pricePerHour = slot.pricePerHour;
+        const updated = await CourtSlot.findOneAndUpdate(concurrentGuard, { $set: update }, { new: true, runValidators: true });
+        if (!updated) throw Object.assign(new Error("Khung giờ vừa thay đổi; hãy tải lại lịch."), { status: 409 });
+        return { ...updated.toObject(), pricePerHour: resolveSlotHourlyPrice(updated, court) };
+    }
+
     async createVendorCourt(vendorId, courtData, files) {
         const input = parseCourtInput(courtData);
         const vendor = await User.findOne({ _id: vendorId, role: "VENDOR", vendorType: "COURT", status: "ACTIVE" });
         if (!vendor) throw new Error("Chỉ chủ sân đang hoạt động mới được tạo cụm sân!");
-        const existingCourt = await Court.findOne({ vendorId }).select("name");
-        if (existingCourt) throw new Error(`Bạn đã sở hữu sân "${existingCourt.name}". Mỗi chủ sân chỉ được quản lý 1 cụm sân!`);
         const images = files?.map(file => ({ imageUrl: file.path, publicId: file.filename })) || [];
         const court = await Court.create({ ...input, images, status: "AVAILABLE", vendorId });
         await SubCourt.insertMany([
@@ -216,10 +245,19 @@ class VendorService {
         const updateData = parseCourtInput(courtData, court);
         if (updateData.status && updateData.status !== "AVAILABLE" && updateData.status !== court.status) await assertCourtCanClose({ courtId });
         await assertScheduleAllowsBookings(courtId, updateData, court);
+        const priceChanged = updateData.pricePerHour !== undefined && updateData.pricePerHour !== court.pricePerHour;
         if (files?.length) updateData.images = [...court.images, ...files.map(file => ({ imageUrl: file.path, publicId: file.filename }))];
         const updated = await Court.findByIdAndUpdate(courtId, { $set: updateData }, { new: true, runValidators: true });
         let slotsPending = false;
-        if (updated.status === "AVAILABLE" && (scheduleChanged(updateData, court) || court.status !== "AVAILABLE")) {
+        if (priceChanged) {
+            const today = vietnamDate();
+            const now = new Date().toLocaleTimeString("sv-SE", { timeZone: "Asia/Ho_Chi_Minh", hour12: false });
+            await CourtSlot.updateMany({
+                courtId, isBooked: false, isBlocked: { $ne: true }, isPriceOverride: { $ne: true },
+                $or: [{ date: { $gt: today } }, { date: today, startTime: { $gt: now } }]
+            }, { $set: { pricePerHour: updated.pricePerHour } });
+        }
+        if (updated.status === "AVAILABLE" && (scheduleChanged(updateData, court) || priceChanged || court.status !== "AVAILABLE")) {
             try { await regenerateSlotsForCourt(courtId); }
             catch (error) { slotsPending = true; console.error("[Slots] Reconciliation pending", String(courtId), error.message); }
         }

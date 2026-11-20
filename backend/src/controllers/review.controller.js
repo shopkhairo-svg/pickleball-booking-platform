@@ -1,6 +1,15 @@
 import reviewService from "../services/review.service.js";
 
 class ReviewController {
+    async getCommunityReviews(req, res) {
+        try {
+            const result = await reviewService.getCommunityReviews(req.query);
+            return res.status(200).json({ success: true, ...result });
+        } catch (error) {
+            return res.status(error.status || 400).json({ success: false, message: error.message });
+        }
+    }
+
     async createReview(req, res) {
         try {
             // Map ảnh từ Multer/Cloudinary sang format {imageUrl, publicId}

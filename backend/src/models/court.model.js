@@ -124,13 +124,7 @@ courtSchema.index({ status: 1 });
 courtSchema.index({ reviewCount: -1 });
 courtSchema.index({ favoriteCount: -1 });
 courtSchema.index({ viewCount: -1 });
-courtSchema.index(
-    { vendorId: 1 },
-    {
-        unique: true,
-        partialFilterExpression: { vendorId: { $type: "objectId" } }
-    }
-);
+courtSchema.index({ vendorId: 1 }, { name: "vendorId_lookup" });
 courtSchema.index({
     location: "text",
     name: "text"

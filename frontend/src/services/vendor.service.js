@@ -10,15 +10,13 @@ export const vendorService = {
     getCourts: async () => {
         return await axiosClient.get("/vendor/courts");
     },
+    getCourtSlots: async (courtId, date) => axiosClient.get(`/vendor/courts/${courtId}/slots`, { params: { date } }),
+    updateSlot: async (slotId, data) => axiosClient.patch(`/vendor/slots/${slotId}`, data),
     createCourt: async (formData) => {
-        return await axiosClient.post("/vendor/courts", formData, {
-            headers: { "Content-Type": "multipart/form-data" }
-        });
+        return await axiosClient.post("/vendor/courts", formData);
     },
     updateCourt: async (id, formData) => {
-        return await axiosClient.put(`/vendor/courts/${id}`, formData, {
-            headers: { "Content-Type": "multipart/form-data" }
-        });
+        return await axiosClient.put(`/vendor/courts/${id}`, formData);
     },
     deleteCourt: async (id) => {
         return await axiosClient.delete(`/vendor/courts/${id}`);

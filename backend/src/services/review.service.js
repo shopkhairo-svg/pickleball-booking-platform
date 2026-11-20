@@ -6,6 +6,58 @@ import mongoose from "mongoose";
 
 
 class ReviewService {
+    async getCommunityReviews(query = {}) {
+        const page = Math.max(1, Number.parseInt(query.page, 10) || 1);
+        const limit = Math.max(1, Math.min(Number.parseInt(query.limit, 10) || 12, 30));
+        const filter = { status: "APPROVED" };
+
+        if (query.courtId !== undefined) {
+            if (!mongoose.isObjectIdOrHexString(query.courtId)) {
+                throw Object.assign(new Error("Mã sân không hợp lệ!"), { status: 400 });
+            }
+            filter.courtId = query.courtId;
+        }
+        if (query.rating !== undefined) {
+            const rating = Number(query.rating);
+            if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+                throw Object.assign(new Error("Mức sao phải là số nguyên từ 1 đến 5!"), { status: 400 });
+            }
+            filter.rating = rating;
+        }
+        if (query.withPhotos === "true") filter["images.0"] = { $exists: true };
+        if (query.withPhotos !== undefined && !["true", "false"].includes(query.withPhotos)) {
+            throw Object.assign(new Error("Bộ lọc ảnh không hợp lệ!"), { status: 400 });
+        }
+
+        const sort = query.sort === "top"
+            ? { rating: -1, createdAt: -1, _id: -1 }
+            : { createdAt: -1, _id: -1 };
+        if (query.sort !== undefined && !["newest", "top"].includes(query.sort)) {
+            throw Object.assign(new Error("Cách sắp xếp không hợp lệ!"), { status: 400 });
+        }
+
+        const [reviews, total] = await Promise.all([
+            Review.find(filter)
+                .populate("userId", "fullName avatar")
+                .populate("courtId", "name location address images averageRating reviewCount pricePerHour")
+                .sort(sort)
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .lean(),
+            Review.countDocuments(filter)
+        ]);
+
+        return {
+            reviews,
+            pagination: {
+                totalItems: total,
+                currentPage: page,
+                totalPages: Math.ceil(total / limit),
+                limit
+            }
+        };
+    }
+
     async updateCourtStats(courtId) {
         const stats = await Review.aggregate([
             {

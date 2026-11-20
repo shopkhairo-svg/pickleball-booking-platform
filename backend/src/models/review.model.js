@@ -44,6 +44,8 @@ const reviewSchema = new mongoose.Schema({
 });
 
 reviewSchema.index({ courtId: 1, status: 1, createdAt: -1 });
+reviewSchema.index({ status: 1, createdAt: -1, _id: -1 });
+reviewSchema.index({ status: 1, rating: -1, createdAt: -1, _id: -1 });
 reviewSchema.index({ userId: 1, createdAt: -1 });
 reviewSchema.index({ bookingId: 1 });
 reviewSchema.index({ userId: 1, courtId: 1, bookingId: 1 }, { unique: true });

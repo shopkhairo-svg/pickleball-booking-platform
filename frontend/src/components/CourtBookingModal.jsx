@@ -9,7 +9,7 @@ export default function CourtBookingModal({ court, slot, date, onClose, onBooked
     const [booking, setBooking] = useState(null);
     const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
     const minutes = time => time.split(":").reduce((h, m) => Number(h) * 60 + Number(m));
-    const price = Math.round(court.pricePerHour * (minutes(slot.endTime) - minutes(slot.time)) / 60);
+    const price = Math.round((slot.pricePerHour ?? court.pricePerHour) * (minutes(slot.endTime) - minutes(slot.time)) / 60);
     const fee = Math.round(price * 0.05);
     const submit = async e => {
         e.preventDefault();

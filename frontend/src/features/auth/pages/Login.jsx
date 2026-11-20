@@ -21,7 +21,7 @@ export default function Login() {
         try {
             const data = await authService.login(email, password);
             setAuth(data.user, data.accessToken);
-            localStorage.setItem("refreshToken", data.refreshToken);
+            sessionStorage.setItem("refreshToken", data.refreshToken);
             navigate(data.redirectUrl);
         } catch (err) {
             setErrorMsg(err.response?.data?.message || "Thông tin đăng nhập không hợp lệ.");
@@ -121,7 +121,7 @@ export default function Login() {
                                     try {
                                         const data = await authService.googleLogin(credentialResponse.credential);
                                         setAuth(data.user, data.accessToken);
-                                        localStorage.setItem("refreshToken", data.refreshToken);
+                                        sessionStorage.setItem("refreshToken", data.refreshToken);
                                         navigate(data.redirectUrl);
                                     } catch (err) {
                                         setErrorMsg(err.response?.data?.message || "Google authentication failed.");
