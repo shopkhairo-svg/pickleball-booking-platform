@@ -25,7 +25,7 @@ const navSections = [
         title: "Quản trị",
         items: [
             { path: "/admin/users", label: "Người dùng", icon: "group" },
-            { path: "/admin/coupons", label: "Ưu đãi · Đang phát triển", icon: "sell" },
+            { path: "/admin/coupons", label: "Ưu đãi", icon: "sell" },
             { path: "/admin/reviews", label: "Đánh giá", icon: "rate_review" },
         ],
     },

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { userService } from "@/services/user.service";
+import { commerceService } from "@/services/commerce.service";
 
 export default function CourtBookingModal({ court, slot, date, onClose, onBooked, onSlotConflict }) {
     const [note, setNote] = useState("");
@@ -8,15 +9,26 @@ export default function CourtBookingModal({ court, slot, date, onClose, onBooked
     const [error, setError] = useState("");
     const [booking, setBooking] = useState(null);
     const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+    const [couponCode, setCouponCode] = useState("");
+    const [couponDiscount, setCouponDiscount] = useState(0);
+    const [couponMessage, setCouponMessage] = useState("");
     const minutes = time => time.split(":").reduce((h, m) => Number(h) * 60 + Number(m));
     const price = Math.round((slot.pricePerHour ?? court.pricePerHour) * (minutes(slot.endTime) - minutes(slot.time)) / 60);
     const fee = Math.round(price * 0.05);
+    const applyCoupon = async () => {
+        setCouponMessage(""); setCouponDiscount(0);
+        try {
+            const result = await commerceService.validateCoupon({ code: couponCode.trim(), orderValue: price, courtId: court._id || court.id });
+            setCouponDiscount(result.discountAmount || 0);
+            setCouponMessage(`Đã áp dụng mã ${result.coupon.code}.`);
+        } catch (err) { setCouponMessage(err.response?.data?.message || "Mã ưu đãi không hợp lệ."); }
+    };
     const submit = async e => {
         e.preventDefault();
         if (busy || booking) return;
         setBusy(true); setError("");
         try {
-            const result = await userService.createBooking({ slotId: slot.slotId, note, paymentMethod: "CASH", requestKey });
+            const result = await userService.createBooking({ slotId: slot.slotId, note, paymentMethod: "CASH", requestKey, ...(couponDiscount ? { couponCode: couponCode.trim() } : {}) });
             setBooking(result);
             onBooked(slot.slotId);
         } catch (err) {
@@ -45,9 +57,14 @@ export default function CourtBookingModal({ court, slot, date, onClose, onBooked
                 <Link className="block rounded-xl bg-primary p-3 text-center text-white" to="/user/profile">Xem lịch đặt sân</Link>
             </div> : <form onSubmit={submit} className="mt-6 space-y-4">
                 <p>Tiền sân: {price.toLocaleString("vi-VN")}đ · Phí dịch vụ 5%: {fee.toLocaleString("vi-VN")}đ</p>
-                <p className="font-bold">Tổng cộng: {(price + fee).toLocaleString("vi-VN")}đ — thanh toán tại sân</p>
+                <p className="font-bold">Tổng cộng: {(price - couponDiscount + fee).toLocaleString("vi-VN")}đ — thanh toán tại sân</p>
+                <div className="flex gap-2">
+                    <input value={couponCode} onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponDiscount(0); setCouponMessage(""); }} placeholder="Mã ưu đãi" className="min-w-0 flex-1 rounded-xl border p-3" />
+                    <button type="button" onClick={applyCoupon} disabled={!couponCode.trim()} className="rounded-xl border px-4 font-semibold disabled:opacity-50">Áp dụng</button>
+                </div>
+                {couponMessage && <p role="status" className={couponDiscount ? "text-emerald-700" : "text-amber-700"}>{couponMessage}</p>}
                 <label className="block">Ghi chú<textarea value={note} maxLength={1000} onChange={e => setNote(e.target.value)} className="mt-2 w-full rounded-xl border p-3" /></label>
-                <p className="text-sm text-gray-500">Thuê dụng cụ, ưu đãi và thanh toán online đang phát triển.</p>
+                <p className="text-sm text-gray-500">Thuê dụng cụ, điểm thưởng và thanh toán online đang phát triển.</p>
                 <p className="text-sm text-gray-600">Bạn có thể tự hủy trước giờ chơi ít nhất 36 tiếng. Nếu cần hủy sát giờ, hãy liên hệ sân.</p>
                 {error && <p role="alert" className="text-red-600">{error}</p>}
                 <button disabled={busy} className="w-full rounded-xl bg-primary p-3 font-bold text-white disabled:opacity-50">{busy ? "Đang đặt sân…" : "Đặt sân"}</button>

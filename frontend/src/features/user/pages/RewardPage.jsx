@@ -129,6 +129,7 @@ export default function RewardPage() {
     const [wallet, setWallet] = useState(null);
     const [transactions, setTransactions] = useState([]);
     const [loadingWallet, setLoadingWallet] = useState(true);
+    const [availableCoupons, setAvailableCoupons] = useState([]);
 
     // Coupon check
     const [couponCode, setCouponCode] = useState("");
@@ -147,6 +148,9 @@ export default function RewardPage() {
             })
             .catch(err => console.error("Wallet error:", err))
             .finally(() => setLoadingWallet(false));
+        commerceService.getAvailableCoupons()
+            .then(res => setAvailableCoupons(res?.coupons || []))
+            .catch(err => console.error("Coupons error:", err));
     }, []);
 
     const handleCheckCoupon = async (e) => {
@@ -198,6 +202,14 @@ export default function RewardPage() {
                     <h1 className="section-heading">Điểm & Ưu đãi</h1>
                     <p className="muted-copy mt-1">Quản lý điểm tích lũy và kiểm tra mã giảm giá của bạn</p>
                 </div>
+
+                <section className="space-y-4">
+                    <div>
+                        <h2 className="text-xl font-bold">Ưu đãi dành cho bạn</h2>
+                        <p className="muted-copy mt-1">Ưu đãi thân thiết được mở sau các lượt chơi đã hoàn tất và thanh toán tại từng sân.</p>
+                    </div>
+                    {availableCoupons.length ? availableCoupons.map(coupon => <CouponResultCard key={coupon._id} coupon={coupon} />) : <p className="rounded-xl border border-dashed p-5 text-sm text-gray-500">Chưa có mã ưu đãi khả dụng. Sau 3 lượt chơi hoàn tất tại cùng một sân, bạn sẽ nhận ưu đãi cho lần tiếp theo.</p>}
+                </section>
 
                 {/* ─── Wallet Hero ─── */}
                 {loadingWallet ? (

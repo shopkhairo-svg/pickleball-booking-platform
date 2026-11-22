@@ -1,5 +1,39 @@
 # Production deployment
 
+## Current public domains and Cloudflare Tunnel
+
+- App and admin: https://pickleballsytems.io.vn
+- API base: https://api.pickleballsytems.io.vn/api
+- Swagger: https://api.pickleballsytems.io.vn/api-docs/
+
+The regular [Compose file](../docker-compose.yml) defaults to these public URLs.
+Its frontend build argument `VITE_API_BASE_URL` and backend environment variables
+`FRONTEND_URL` / `CORS_ORIGINS` can be overridden in the repository root `.env`.
+`FRONTEND_URL` is the app origin without a path. `CORS_ORIGINS` accepts additional
+comma-separated origins and includes the API origin so Swagger can send requests.
+Changing `backend/.env` alone does not override values in Compose's `environment`.
+
+With the tunnel running on the same Windows host as Docker, publish
+`pickleballsytems.io.vn` to `http://localhost:80` and
+`api.pickleballsytems.io.vn` to `http://localhost:5001`. Leave the tunnel path empty:
+the backend already serves `/api`, `/api-docs/` and `/uploads/`.
+
+After backend CORS changes, run from the repository root:
+
+```sh
+docker compose up -d --no-deps --build backend
+docker compose exec -T frontend nginx -s reload
+```
+
+After changing `VITE_API_BASE_URL`, rebuild the frontend too:
+
+```sh
+docker compose up -d --no-deps --build frontend
+```
+
+For a separate always-on VM, use the production stack below. Swagger is also
+available directly at `https://API_DOMAIN/api-docs/`; a separate docs domain is optional.
+
 The production Compose stack runs the frontend, API, MongoDB, Redis, and Caddy on a persistent Linux VM. Caddy is the only public container: it accepts HTTP/HTTPS, obtains and renews TLS certificates, and routes the three hostnames. The frontend and admin share the application hostname (`APP_DOMAIN`); the API and Swagger UI use `API_DOMAIN` and `DOCS_DOMAIN`.
 
 ## DNS and host setup

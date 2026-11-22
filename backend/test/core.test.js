@@ -35,11 +35,11 @@ test("Reminder 30 minute boundary, timezone and exclusions", () => {
     assert.equal(reminderIsDue({ ...booking, reminderSentAt: new Date() }, new Date("2030-01-01T16:45:00Z")), false);
 });
 test("Deferred endpoints return an explicit 501; core endpoints continue", () => {
-    for (const path of ["/shipper/stats", "/maintenance-staff", "/coupons/validate", "/points/wallet", "/admin/equipments", "/vendor/import-orders/123/confirm", "/bookings/123/verify-payment"]) {
+    for (const path of ["/shipper/stats", "/maintenance-staff", "/admin/equipments", "/vendor/import-orders/123/confirm", "/bookings/123/verify-payment"]) {
         const res = { status(code) { assert.equal(code, 501); return this; }, json(body) { assert.equal(body.code, "FEATURE_IN_DEVELOPMENT"); } };
         developmentGate({ path }, res, () => assert.fail(path));
     }
-    for (const path of ["/auth/login", "/courts", "/bookings", "/admin/bookings/123/cash-payment", "/reviews", "/notifications"]) {
+    for (const path of ["/auth/login", "/courts", "/bookings", "/admin/bookings/123/cash-payment", "/reviews", "/notifications", "/coupons/available", "/coupons/validate", "/coupons/admin", "/points/wallet"]) {
         let passed = false; developmentGate({ path }, {}, () => { passed = true; }); assert.equal(passed, true);
     }
 });

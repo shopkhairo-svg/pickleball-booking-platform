@@ -13,7 +13,8 @@ const emptyForm = {
     perUserLimit: 1,
     startDate: new Date().toISOString().slice(0, 10),
     endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-    status: "ACTIVE"
+    status: "ACTIVE",
+    targetEmails: ""
 };
 
 const statusBadge = {
@@ -80,6 +81,7 @@ export default function CouponManagement() {
                 maxDiscountValue: form.maxDiscountValue ? Number(form.maxDiscountValue) : null,
                 usageLimit: form.usageLimit ? Number(form.usageLimit) : null,
                 perUserLimit: Number(form.perUserLimit || 1),
+                targetEmails: form.targetEmails,
             };
             const res = await commerceService.createCoupon(payload);
             if (res.success) {
@@ -216,6 +218,10 @@ export default function CouponManagement() {
                                     placeholder="Mô tả ngắn về coupon..."
                                     className={inputCls}
                                 />
+                            </InputField>
+
+                            <InputField label="Tài khoản nhận ưu đãi (email)" icon="group">
+                                <input value={form.targetEmails} onChange={e => handleChange("targetEmails", e.target.value)} placeholder="Để trống áp dụng cho mọi người; nhập email, cách nhau bằng dấu phẩy" className={inputCls} />
                             </InputField>
 
                             {/* Loại giảm */}

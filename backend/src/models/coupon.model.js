@@ -25,7 +25,11 @@ const couponSchema = new mongoose.Schema({
     discountValue: {
         type: Number,
         required: true,
-        min: 0
+        min: 0,
+        validate: {
+            validator(value) { return this.discountType !== "PERCENT" || value <= 100; },
+            message: "Phần trăm giảm giá không được vượt quá 100."
+        }
     },
     minOrderValue: {
         type: Number,
@@ -68,7 +72,10 @@ const couponSchema = new mongoose.Schema({
             type: mongoose.Schema.Types.ObjectId,
             ref: "Court"
         }
-    ]
+    ],
+    // Empty means available to every user; populated coupons are account-specific.
+    targetUserIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    loyaltyReward: { type: Boolean, default: false }
 }, {
     timestamps: true
 });

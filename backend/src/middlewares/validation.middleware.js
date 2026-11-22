@@ -146,8 +146,8 @@ export const bookingCreateValidator = [
     body("slotId").isMongoId().withMessage("Vui lòng chọn đúng ô giờ đặt sân!"),
     body("couponCode")
         .optional({ checkFalsy: true })
-        .isLength({ max: 40 })
-        .withMessage("Mã giảm giá tối đa 40 ký tự!"),
+          .isLength({ max: 64 })
+          .withMessage("Mã giảm giá tối đa 64 ký tự!"),
     body("pointsToUse")
         .optional()
         .isInt({ min: 0 })

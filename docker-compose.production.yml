@@ -42,6 +42,7 @@ services:
       MONGO_URL: mongodb://mongo:27017/pickleball_booking
       REDIS_URL: redis://redis:6379
       FRONTEND_URL: https://${APP_DOMAIN}
+      CORS_ORIGINS: https://${API_DOMAIN}
       TRUST_PROXY: "1"
     expose:
       - "5000"

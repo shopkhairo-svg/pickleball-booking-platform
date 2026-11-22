@@ -4,6 +4,7 @@ import CourtSlot from "../models/courtSlot.model.js";
 import Court from "../models/court.model.js";
 import SubCourt from "../models/subCourt.model.js";
 import notificationService from "./notification.service.js";
+import couponService from "./coupon.service.js";
 
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const bookingDateTime = (booking, time) => new Date(`${booking.bookingDate}T${time}:00+07:00`);
@@ -36,6 +37,8 @@ export async function cancelCoreBooking(bookingId, { userId, reason = "", admin 
         booking = updated;
         await notify(booking);
     }
+    try { await couponService.rollbackUsage(bookingId); }
+    catch (error) { console.error("[Coupon] Usage rollback failed:", error.message); }
     // Safe to retry after a DB outage between cancellation and slot release.
     await releaseCancelledSlot(booking);
     return { message: "Đã hủy lịch đặt sân.", booking, bookingCode: booking.bookingCode, status: booking.status, refundPending: booking.paymentStatus === "REFUND_PENDING", refunded: booking.paymentStatus === "REFUNDED" };
@@ -64,6 +67,15 @@ export async function completeCoreBooking(bookingId) {
     if (!Number.isFinite(+endsAt) || endsAt > new Date()) throw fail("Chưa đến giờ kết thúc lượt chơi.");
     const booking = await Booking.findOneAndUpdate({ _id: bookingId, status: "CONFIRMED", paymentStatus: "PAID" }, { $set: { status: "COMPLETED" } }, { returnDocument: "after" });
     if (!booking) throw fail("Đơn vừa thay đổi. Vui lòng tải lại.", 409);
+    try {
+        const reward = await couponService.awardCourtLoyalty(booking);
+        if (reward) await notificationService.createForUser({
+            userId: booking.userId, title: "Bạn vừa nhận ưu đãi thân thiết",
+            message: `Mã ${reward.code} giảm ${reward.discountValue}% tại sân này. Mã có hiệu lực trong 90 ngày.`,
+            type: "COUPON", referenceId: reward._id, referenceType: "Coupon"
+        });
+    }
+    catch (error) { console.error("[Loyalty] Coupon award failed:", error.message); }
     await notify(booking);
     return { message: "Đã hoàn tất lượt chơi. Khách hàng có thể gửi đánh giá.", booking };
 }

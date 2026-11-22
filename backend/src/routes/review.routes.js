@@ -1,3 +1,4 @@
+// OpenAPI contracts: ../docs/public.paths.js (verified by test:docs).
 import express from "express";
 import reviewController from "../controllers/review.controller.js";
 import { verifyToken, requireAdmin } from "../middlewares/auth.middleware.js";
@@ -13,34 +14,6 @@ import {
 const router = express.Router();
 
 // Public community feed. Only approved, booking-verified reviews are returned.
-/**
- * @swagger
- * /reviews:
- *   get:
- *     summary: Browse approved, booking-verified court reviews
- *     parameters:
- *       - in: query
- *         name: page
- *         schema: { type: integer, minimum: 1 }
- *       - in: query
- *         name: limit
- *         schema: { type: integer, minimum: 1, maximum: 30, default: 12 }
- *       - in: query
- *         name: courtId
- *         schema: { type: string }
- *       - in: query
- *         name: rating
- *         schema: { type: integer, minimum: 1, maximum: 5 }
- *       - in: query
- *         name: withPhotos
- *         schema: { type: boolean }
- *       - in: query
- *         name: sort
- *         schema: { type: string, enum: [newest, top], default: newest }
- *     responses:
- *       200: { description: Paginated approved reviews with player and court details }
- *       400: { description: Invalid filter }
- */
 router.get(
     "/",
     globalLimiter,

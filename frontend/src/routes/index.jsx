@@ -15,6 +15,7 @@ import ReviewCommunity from "../features/court/pages/ReviewCommunity.jsx";
 // 👤 User imports
 import UserProfile from "../features/user/pages/UserProfile.jsx";
 import Favorites from "../features/user/pages/Favorites.jsx";
+import RewardPage from "../features/user/pages/RewardPage.jsx";
 
 // 🛡️ Admin imports
 import ProtectedRoute from "./ProtectedRoute.jsx";
@@ -25,6 +26,7 @@ import BookingManagement from "../features/admin/pages/BookingManagement.jsx";
 import UserManagement from "../features/admin/pages/UserManagement.jsx";
 import Settings from "../features/admin/pages/Settings.jsx";
 import ReviewManagement from "../features/admin/pages/ReviewManagement.jsx";
+import CouponManagement from "../features/admin/pages/CouponManagement.jsx";
 
 // 🏬 Vendor imports
 import VendorLayout from "../layouts/VendorLayout.jsx";
@@ -95,7 +97,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "rewards/*",
-                        element: <UnderDevelopment />,
+                        element: <RewardPage />,
                     },
                 ],
             },
@@ -135,7 +137,7 @@ export const router = createBrowserRouter([
                     },
                     {
                         path: "coupons/*",
-                        element: <UnderDevelopment />,
+                        element: <CouponManagement />,
                     },
                     {
                         path: "reviews",

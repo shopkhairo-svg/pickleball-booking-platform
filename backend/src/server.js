@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import path from "node:path";
+import { getCorsOptions, handleCorsError } from "./config/cors.js";
 
 import { connectDB } from "./config/db.js"; //
 import authRoutes from "./routes/auth.routes.js";
@@ -19,8 +20,7 @@ import shipperRoutes from "./routes/shipper.routes.js";
 import maintenanceStaffRoutes from "./routes/maintenanceStaff.routes.js";
 
 import { developmentGate } from "./middlewares/development.middleware.js";
-import swaggerJsdoc from "swagger-jsdoc";
-import swaggerUi from "swagger-ui-express";
+import { createApiDocsRouter } from "./docs/router.js";
 import { startBookingReminders } from "./services/bookingReminder.service.js";
 import Booking from "./models/booking.model.js";
 import CourtSlot from "./models/courtSlot.model.js";
@@ -28,47 +28,12 @@ import CourtSlot from "./models/courtSlot.model.js";
 const app = express();
 if (process.env.TRUST_PROXY === "1") app.set("trust proxy", 1);
 
-// ✅ Fix #13: CORS whitelist theo FRONTEND_URL env var, không mở cho mọi origin
-// Trong production: set FRONTEND_URL=https://your-domain.com
-// Trong dev: localhost:5173 vẫn hoạt động
-const allowedOrigins = [
-    process.env.FRONTEND_URL || "http://localhost:5173",
-    "http://localhost:5173",
-    "http://localhost:3000"
-];
-
-app.use(cors({
-    origin: (origin, callback) => {
-        // Cho phép request không có origin (Postman, server-to-server, mobile app)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
-            return callback(null, true);
-        }
-        return callback(new Error(`CORS: Origin ${origin} không được phép truy cập API!`));
-    },
-    credentials: true // Cho phép gửi cookie (cần cho httpOnly refreshToken sau này)
-}));
+app.use(cors(getCorsOptions()));
+app.use(handleCorsError);
 app.use(express.json());
 app.use("/uploads", express.static(path.resolve("uploads"), { fallthrough: false, maxAge: "1d" }));
 
-// ---------- Swagger setup ----------
-const swaggerDefinition = {
-  openapi: "3.0.0",
-  info: {
-    title: "Pickleball Booking System API",
-    version: "1.0.0",
-    description: "Auto‑generated API documentation using swagger-jsdoc",
-  },
-  servers: [{ url: "/api" }],
-};
-const swaggerOptions = {
-  swaggerDefinition,
-  // Look for JSDoc comments in all route files
-  apis: ["./src/routes/*.js"],
-};
-const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-// -----------------------------------
+app.use("/api-docs", createApiDocsRouter());
 app.use("/api", developmentGate);
 
 // 1. Kết nối DB (Bắt buộc dùng await để đảm bảo DB sẵn sàng trước khi mở cổng)

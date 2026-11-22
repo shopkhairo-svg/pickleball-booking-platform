@@ -60,7 +60,7 @@ export default function MainLayout() {
                             {isAuthenticated && (
                                 <NavLink to="/user/rewards" className={getNavLinkClass}>
                                     <span className="material-symbols-outlined text-[17px]">workspace_premium</span>
-                                    Ưu đãi · Đang phát triển
+                                    Ưu đãi
                                 </NavLink>
                             )}
                         </nav>

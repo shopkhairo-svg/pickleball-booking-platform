@@ -8,7 +8,7 @@ export function developmentGate(req, res, next) {
     const path = req.path.split("/").map(segment => {
         try { return decodeURIComponent(segment); } catch { return segment; }
     }).join("/").replace(/\/{2,}/g, "/").toLowerCase();
-    const disabled = /^\/(shipper|maintenance-staff|coupons|points)(\/|$)/.test(path)
+    const disabled = /^\/(shipper|maintenance-staff)(\/|$)/.test(path)
         || /^\/(admin|vendor)\/(equipments|import-orders|maintenance|maintenance-staff|shippers|deliveries)(\/|$)/.test(path)
         || /^\/admin\/analytics\/equipment-stats(\/|$)/.test(path)
         || /^\/vendor\/bookings\/[^/]+\/(prepare|return-equipment)(\/|$)/.test(path)
